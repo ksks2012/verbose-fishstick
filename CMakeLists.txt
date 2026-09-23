@@ -1,0 +1,178 @@
+cmake_minimum_required(VERSION 3.28)
+
+project(noto3d_editor
+    VERSION 0.1.0
+    DESCRIPTION "C++/OpenGL editor for Noto 3D-style emoji composition (MVP)"
+    LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ---------------------------------------------------------------------------
+# Options
+# ---------------------------------------------------------------------------
+option(NOTO3D_WERROR     "Treat warnings as errors" OFF)
+option(NOTO3D_SANITIZERS "Enable ASan+UBSan in this build" OFF)
+option(NOTO3D_DEBUG_GL   "Request a debug OpenGL context (via GLFW hint)" OFF)
+
+# ---------------------------------------------------------------------------
+# Warnings (own code only — always on per ADR-0008; never applied to third-party targets)
+# ---------------------------------------------------------------------------
+function(noto3d_set_warnings TARGET)
+    target_compile_options(${TARGET} PRIVATE -Wall -Wextra -Wpedantic)
+    if(NOTO3D_WERROR)
+        target_compile_options(${TARGET} PRIVATE -Werror)
+    endif()
+endfunction()
+
+function(noto3d_apply_sanitizers TARGET)
+    if(NOTO3D_SANITIZERS)
+        target_compile_options(${TARGET} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_options(${TARGET} PRIVATE -fsanitize=address,undefined)
+    endif()
+endfunction()
+
+# ---------------------------------------------------------------------------
+# Dependencies (ADR-0003) — layout mirrors ../reimagined-meme:
+# each external library lives in ${CMAKE_SOURCE_DIR}/lib/<name>, populated by
+# FetchContent with SOURCE_DIR at configure time. lib/ is gitignored except the
+# two deps that cannot be fetched and are committed:
+#   lib/glad — generated GL 3.3 Core loader + GL_KHR_debug
+#   lib/stb  — stb_image single header
+# Order matters: GLFW runs its internal Xinerama X11 probe during configure and
+# aborts until libxinerama-dev/libxcursor-dev are installed (Q9 machine prereq),
+# so it is configured last to keep the other lib/ clones flowing.
+# ---------------------------------------------------------------------------
+include(FetchContent)
+
+set(LIB_DIR ${CMAKE_SOURCE_DIR}/lib)
+
+# nlohmann/json — header-only
+set(NLOHMANN_JSON_DIR ${LIB_DIR}/nlohmann_json)
+FetchContent_Declare(nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG        v3.11.3
+    GIT_SHALLOW    TRUE
+    SOURCE_DIR     ${NLOHMANN_JSON_DIR})
+
+# GLM
+set(GLM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLM_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+set(GLM_DIR ${LIB_DIR}/glm)
+FetchContent_Declare(glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG        1.0.1
+    GIT_SHALLOW    TRUE
+    SOURCE_DIR     ${GLM_DIR})
+
+# ImGui — docking required (M5); NOT merged into plain master
+set(IMGUI_DIR ${LIB_DIR}/imgui)
+FetchContent_Declare(imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG        v1.92.9-docking
+    GIT_SHALLOW    TRUE
+    SOURCE_DIR     ${IMGUI_DIR})
+
+# spdlog — structured logging backend for noto3d::core::Log (ADR-0008)
+set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+set(SPDLOG_BUILD_TESTS   OFF CACHE BOOL "" FORCE)
+set(SPDLOG_DIR ${LIB_DIR}/spdlog)
+FetchContent_Declare(spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG        v1.14.1
+    GIT_SHALLOW    TRUE
+    SOURCE_DIR     ${SPDLOG_DIR})
+
+# GLFW — X11 backend (configure last, see comment above)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+# Wayland backend needs xkbcommon via pkg-config; ADR-0003 pins the X11 backend, whose
+# deps (Xinerama/Xcursor/XInput/XFixes headers) are found via find_path/find_library.
+# Keep pkg-config out of the build contract.
+set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+set(GLFW_DIR ${LIB_DIR}/glfw)
+FetchContent_Declare(glfw
+    GIT_REPOSITORY https://github.com/glfw/glfw.git
+    GIT_TAG        3.4
+    GIT_SHALLOW    TRUE
+    SOURCE_DIR     ${GLFW_DIR})
+
+# ── Q9 Machine-prerequisite check (user story 4) ──────────────────────────
+# GLFW 3.4 (X11 backend) requires these headers at configure time.  Give a
+# clear, actionable error before FetchContent_MakeAvailable triggers GLFW's
+# own CMake configure and emits cryptic assertion failures.
+if(UNIX AND NOT APPLE)
+    find_path(XINERAMA_H_PATH "X11/extensions/Xinerama.h")
+    find_path(XCURSOR_H_PATH  "X11/Xcursor/Xcursor.h")
+    if(NOT XINERAMA_H_PATH OR NOT XCURSOR_H_PATH)
+        message(FATAL_ERROR
+            "[noto3d] Missing X11 development headers required by GLFW 3.4 (X11 backend).\n"
+            "  Install them once on the build machine:\n"
+            "    sudo apt install libxinerama-dev libxcursor-dev libxi-dev libxrandr-dev\n"
+            "  Then re-run: cmake --preset dev")
+    endif()
+endif()
+
+FetchContent_MakeAvailable(nlohmann_json glm imgui spdlog glfw)
+
+# Suppress compiler warnings from spdlog's own headers when included by our code
+if(TARGET spdlog)
+    set_target_properties(spdlog PROPERTIES
+        INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
+            "$<TARGET_PROPERTY:spdlog,INTERFACE_INCLUDE_DIRECTORIES>")
+endif()
+
+# ---------------------------------------------------------------------------
+# Vendored libraries (ADR-0003) — committed under lib/
+# ---------------------------------------------------------------------------
+add_library(glad STATIC ${LIB_DIR}/glad/src/gl.c)
+target_include_directories(glad PUBLIC ${LIB_DIR}/glad/include)
+
+add_library(stb_header INTERFACE)
+target_include_directories(stb_header INTERFACE ${LIB_DIR}/stb)
+
+# ImGui core + GLFW/OpenGL3 backends (M5; built now to validate fetch/source)
+add_library(imgui STATIC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
+target_include_directories(imgui PRIVATE ${IMGUI_DIR} ${IMGUI_DIR}/backends ${LIB_DIR}/glad/include)
+target_link_libraries(imgui PUBLIC glfw glad)
+target_compile_definitions(imgui PUBLIC GLFW_INCLUDE_NONE IMGUI_IMPL_OPENGL_LOADER_GLAD)
+# noto3d_set_warnings / noto3d_apply_sanitizers are NOT applied to third-party targets
+
+# ---------------------------------------------------------------------------
+# Core library (pure code, ADR-0008) + dependency-free tests (ADR-0008 / M0)
+# ---------------------------------------------------------------------------
+add_library(noto3d_core STATIC
+    src/core/gl_capability.cpp
+    src/core/log.cpp)
+target_include_directories(noto3d_core PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/core ${LIB_DIR}/glad/include)
+target_link_libraries(noto3d_core PUBLIC spdlog::spdlog)
+noto3d_set_warnings(noto3d_core)
+noto3d_apply_sanitizers(noto3d_core)
+
+enable_testing()
+add_executable(noto3d-core-tests tests/core/gl_capability_test.cpp)
+target_link_libraries(noto3d-core-tests PRIVATE noto3d_core)
+noto3d_set_warnings(noto3d-core-tests)
+noto3d_apply_sanitizers(noto3d-core-tests)
+add_test(NAME core-gl-capability COMMAND noto3d-core-tests)
+
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
+add_executable(noto3d-editor src/app/main.cpp)
+target_link_libraries(noto3d-editor PRIVATE
+    glfw glad glm::glm nlohmann_json::nlohmann_json imgui noto3d_core)
+target_compile_definitions(noto3d-editor PRIVATE
+    NOTO3D_DEBUG_GL=$<BOOL:${NOTO3D_DEBUG_GL}>)
+noto3d_set_warnings(noto3d-editor)
+noto3d_apply_sanitizers(noto3d-editor)

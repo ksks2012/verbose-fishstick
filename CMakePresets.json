@@ -1,0 +1,54 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "warnings": {
+        "dev": true,
+        "deprecated": true
+      }
+    },
+    {
+      "name": "dev",
+      "inherits": "base",
+      "displayName": "Development (Debug + sanitizers + debug GL)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "NOTO3D_SANITIZERS": "ON",
+        "NOTO3D_DEBUG_GL": "ON",
+        "NOTO3D_WERROR": "OFF"
+      }
+    },
+    {
+      "name": "dev-clean",
+      "inherits": "dev",
+      "displayName": "Development without sanitizers",
+      "cacheVariables": {
+        "NOTO3D_SANITIZERS": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release (optimized, no sanitizers)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "NOTO3D_SANITIZERS": "OFF",
+        "NOTO3D_DEBUG_GL": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev", "configurePreset": "dev" },
+    { "name": "dev-clean", "configurePreset": "dev-clean" },
+    { "name": "release", "configurePreset": "release" }
+  ]
+}
