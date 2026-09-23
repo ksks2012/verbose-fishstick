@@ -31,8 +31,10 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   libs live in `lib/<name>` (mirrors ../reimagined-meme), fetched via FetchContent explicit
   `SOURCE_DIR` (never `build/_deps`): GLFW 3.4 X11, GLM 1.0.1, ImGui v1.92.9-docking,
   nlohmann/json v3.11.3; glad + stb_image committed under `lib/` (gitignore exceptions).
-  Machine prereqs may need sudo once (Q9): `sudo apt install libxinerama-dev libxcursor-dev`.
-  tinyobjloader deferred to M2. Pinning: tags now, commit-SHA/URL_HASH later.
+  Machine prereqs may need sudo once (Q9): `sudo apt install libxinerama-dev libxcursor-dev
+  libxi-dev` (verified set, Sep 2026). GLFW is built X11-only (`GLFW_BUILD_WAYLAND=OFF`) so its
+  Wayland xkbcommon probe never requires pkg-config. tinyobjloader deferred to M2. Pinning: tags
+  now, commit-SHA/URL_HASH later.
 - ADR-0004: OpenGL 3.3 Core / GLSL 330; numeric capability check via GL_MAJOR_VERSION /
   GL_MINOR_VERSION + GL_CONTEXT_PROFILE_MASK; sRGB framebuffer, color/diffuse textures use
   GL_SRGB8_ALPHA8 where applicable; MSAA 4x; debug GL context in Debug builds (verify GL_KHR_debug

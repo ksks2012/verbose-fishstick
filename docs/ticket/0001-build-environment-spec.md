@@ -93,19 +93,19 @@ acceptance matrix below is fully checked.
   - [x] GLM 1.0.1 tag resolves → clones into `lib/glm`
   - [x] ImGui `v1.92.9-docking` tag resolves → clones into `lib/imgui`
   - [x] nlohmann/json `v3.11.3` tag resolves → clones into `lib/nlohmann_json`
-  - [x] `lib/glad` + `lib/stb` committed; all `lib/` clones gitignored
+  - [ ] `lib/glad` + `lib/stb` committed (clones gitignored committed – awaiting manual commit by the user)
 
   Dependency build (blocked by Q9 machine prerequisite):
-  - [ ] GLFW 3.4 builds
-  - [ ] ImGui STATIC + GLFW/OpenGL3 backends build
+  - [x] GLFW 3.4 builds
+  - [x] ImGui STATIC + GLFW/OpenGL3 backends build
 
   Environment / bootstrap:
-  - [ ] `cmake --preset dev` + build succeeds from a clean configure
-  - [ ] capability pure-function tests pass (3.3/4.6 core → OK; 3.2 core / 3.3 compat → fail)
-  - [ ] `noto3d-editor --frames=5` prints `M0_OK … 3.3+ core profile` capability check
-  - [ ] sRGB + MSAA 4 + depth 24 hints are applied on the created context
-  - [ ] debug GL context is off in release; on in dev with `GL_KHR_debug` verified before use
-  - [ ] default run opens the configured window and closes cleanly
+  - [x] `cmake --preset dev` + build succeeds from a clean configure
+  - [x] capability pure-function tests pass (3.3/4.6 core → OK; 3.2 core / 3.3 compat → fail)
+  - [x] `noto3d-editor --frames=5` prints `M0_OK … 3.3+ core profile` capability check
+  - [x] sRGB + MSAA 4 + depth 24 hints are applied on the created context
+  - [x] debug GL context is off in release; on in dev with `GL_KHR_debug` verified before use
+  - [x] default run opens the configured window and closes cleanly
 
 ## Out of Scope
 

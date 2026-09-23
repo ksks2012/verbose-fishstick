@@ -29,8 +29,11 @@ installed. GLFW 3.4 can be built from source against X11 via CMake `FindX11` wit
 - Pinning: tags first; immutable commit SHAs and URL_HASH later once dev build is stable.
 - Machine prerequisites (Q9): the OS/toolchain packages needed to *build the fetched sources*
   are allowed to require one-time system installation, e.g. `sudo apt install libxinerama-dev
-  libxcursor-dev` (GLFW X11). Unlike project-owned dependencies, these are NOT covered by the
-  "no sudo" contract.
+  libxcursor-dev libxi-dev` (GLFW X11; verified set, Sep 2026). Unlike project-owned
+  dependencies, these are NOT covered by the "no sudo" contract.
+- GLFW is configured X11-only (`GLFW_BUILD_WAYLAND=OFF`): the Wayland backend's xkbcommon probe
+  goes through `pkg_check_modules`, which would require pkg-config; the X11 backend slots are
+  found via `find_path`/`find_library` only, keeping pkg-config out of the build contract.
 
 ## Verification
 The M0 acceptance criteria and running status live in the M0 ticket
