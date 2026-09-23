@@ -1,0 +1,117 @@
+{
+  "manifest_version": 1,
+  "source": {
+    "url": "https://github.com/googlefonts/noto-emoji",
+    "path_prefix": "3D/png/512",
+    "revision": "06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4",
+    "license": "SIL OFL 1.1"
+  },
+  "official_mesh": {
+    "status": "PENDING",
+    "note": "googlefonts/noto-emoji issue #549: raw OBJ 'coming with Unicode 18'; no mesh files exist on any branch as of the pinned revision."
+  },
+  "assets": [
+    {
+      "id": "smile",
+      "reference_image": "references/noto3d/emoji_u1f600_512.png",
+      "geometry": "geometry/placeholders/base_face.obj",
+      "geometry_source": "placeholder",
+      "axis_data": {
+        "up_axis": "y",
+        "recorded_winding": null
+      },
+      "metadata": {
+        "source": "https://github.com/googlefonts/noto-emoji/blob/06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4/3D/png/512/emoji_u1f600.png",
+        "revision": "06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4",
+        "license": "SIL OFL 1.1",
+        "reference_sha256": "7028b70311ec7c6738f93f5234904d2c076a6dcbb5a5434ff8df2a093915726b",
+        "geometry_sha256": "94384f792fbf11eb552220f6160150a3831738fe7629bbbb9f91846b43cb84e0"
+      }
+    },
+    {
+      "id": "warm",
+      "reference_image": "references/noto3d/emoji_u1f60a_512.png",
+      "geometry": "geometry/placeholders/base_face.obj",
+      "geometry_source": "placeholder",
+      "axis_data": {
+        "up_axis": "y",
+        "recorded_winding": null
+      },
+      "metadata": {
+        "source": "https://github.com/googlefonts/noto-emoji/blob/06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4/3D/png/512/emoji_u1f60a.png",
+        "revision": "06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4",
+        "license": "SIL OFL 1.1",
+        "reference_sha256": "47856209b2fe0b98deb338fba6c3d6258e9922de2001867dc0af19ca820aa995",
+        "geometry_sha256": "94384f792fbf11eb552220f6160150a3831738fe7629bbbb9f91846b43cb84e0"
+      }
+    },
+    {
+      "id": "cool",
+      "reference_image": "references/noto3d/emoji_u1f60e_512.png",
+      "geometry": "geometry/placeholders/base_face.obj",
+      "geometry_source": "placeholder",
+      "axis_data": {
+        "up_axis": "y",
+        "recorded_winding": null
+      },
+      "metadata": {
+        "source": "https://github.com/googlefonts/noto-emoji/blob/06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4/3D/png/512/emoji_u1f60e.png",
+        "revision": "06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4",
+        "license": "SIL OFL 1.1",
+        "reference_sha256": "6324af94d6ea49ae42096b36a21a4c1ad7889b0d12a991bea3d905311fb04f83",
+        "geometry_sha256": "94384f792fbf11eb552220f6160150a3831738fe7629bbbb9f91846b43cb84e0"
+      }
+    },
+    {
+      "id": "crown",
+      "reference_image": "references/noto3d/emoji_u1f451_512.png",
+      "geometry": "geometry/placeholders/accessory.obj",
+      "geometry_source": "placeholder",
+      "axis_data": {
+        "up_axis": "y",
+        "recorded_winding": null
+      },
+      "metadata": {
+        "source": "https://github.com/googlefonts/noto-emoji/blob/06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4/3D/png/512/emoji_u1f451.png",
+        "revision": "06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4",
+        "license": "SIL OFL 1.1",
+        "reference_sha256": "a3aca5aa8e8bc4249a890cf81dfb84a6eae30e155372307ac85f1aad3f6d80b2",
+        "geometry_sha256": "44a3834687f2c3d56c489fdc936f08da5812e568e20971ab13f3ed39071bfd68"
+      }
+    },
+    {
+      "id": "sunglasses",
+      "reference_image": "references/noto3d/emoji_u1f576_512.png",
+      "geometry": "geometry/placeholders/generic.obj",
+      "geometry_source": "placeholder",
+      "axis_data": {
+        "up_axis": "y",
+        "recorded_winding": null
+      },
+      "metadata": {
+        "source": "https://github.com/googlefonts/noto-emoji/blob/06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4/3D/png/512/emoji_u1f576.png",
+        "revision": "06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4",
+        "license": "SIL OFL 1.1",
+        "reference_sha256": "51954fdc9ace14af1483fd13d1a53dd75d66d81298362d0bf5148d08d2828469",
+        "geometry_sha256": "aee354ebdd467b29b00118a11a84c8df501b38285b03971178d5847d06a3f05e"
+      }
+    },
+    {
+      "id": "top_hat",
+      "reference_image": "references/noto3d/emoji_u1f3a9_512.png",
+      "geometry": "geometry/placeholders/accessory.obj",
+      "geometry_source": "placeholder",
+      "axis_data": {
+        "up_axis": "y",
+        "recorded_winding": null
+      },
+      "metadata": {
+        "source": "https://github.com/googlefonts/noto-emoji/blob/06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4/3D/png/512/emoji_u1f3a9.png",
+        "revision": "06121655d0e82f9cae6e7ba6feed4fa6fdbfc2a4",
+        "license": "SIL OFL 1.1",
+        "reference_sha256": "eb1853b0c4ea96a6ae833f246504dbcbd6464d2796ade1e4f4e8ec68357bc480",
+        "geometry_sha256": "44a3834687f2c3d56c489fdc936f08da5812e568e20971ab13f3ed39071bfd68"
+      }
+    }
+  ]
+}
