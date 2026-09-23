@@ -1,0 +1,22 @@
+# Build directories
+build/
+out/
+cmake-build-*/
+
+# Session state (per DOCUMENTATION-LIFECYCLE.md)
+.context/
+
+# External libraries (ADR-0003) — cloned into lib/<name> at configure time
+# via FetchContent SOURCE_DIR (mirrors reimagined-meme). The two vendored,
+# non-fetchable deps are committed and un-ignored:
+#   lib/glad/  — generated GL loader (has no upstream repo to fetch)
+#   lib/stb/   — stb_image single header
+lib/*
+!lib/glad/
+!lib/glad/**
+!lib/stb/
+!lib/stb/**
+
+# Editor / OS
+*.swp
+.DS_Store
