@@ -22,6 +22,16 @@ struct Vertex {
 static_assert(sizeof(Vertex) == 32, "Vertex stride must be 32 B (ADR-0006)");
 
 // ---------------------------------------------------------------------------
+// Vertex attribute locations — fixed contract shared by all shaders (ADR-0006).
+// GLSL shaders must use layout(location = N) to match; see shaders/base.vert.
+// ---------------------------------------------------------------------------
+namespace Attrib {
+    constexpr GLuint kPosition = 0;
+    constexpr GLuint kNormal   = 1;
+    constexpr GLuint kUV       = 2;
+}
+
+// ---------------------------------------------------------------------------
 // Mesh — immutable GPU resource after upload (ADR-0006)
 //
 //   * Single interleaved VBO + EBO + VAO; uploaded once in the constructor.

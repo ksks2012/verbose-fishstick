@@ -23,17 +23,17 @@ Mesh::Mesh(std::span<const Vertex> vertices, std::span<const std::uint32_t> indi
                  static_cast<GLsizeiptr>(indices.size() * sizeof(std::uint32_t)),
                  indices.data(), GL_STATIC_DRAW);
 
-    // Attribute layout matches shader locations declared in 0006 (ADR-0006)
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+    // Attribute layout — locations from Attrib constants (ADR-0006); must match shaders/base.vert
+    glEnableVertexAttribArray(Attrib::kPosition);
+    glVertexAttribPointer(Attrib::kPosition, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                           reinterpret_cast<const void*>(offsetof(Vertex, position)));
 
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+    glEnableVertexAttribArray(Attrib::kNormal);
+    glVertexAttribPointer(Attrib::kNormal, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                           reinterpret_cast<const void*>(offsetof(Vertex, normal)));
 
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+    glEnableVertexAttribArray(Attrib::kUV);
+    glVertexAttribPointer(Attrib::kUV, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                           reinterpret_cast<const void*>(offsetof(Vertex, uv)));
 
     glBindVertexArray(0);

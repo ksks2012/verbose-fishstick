@@ -34,8 +34,11 @@ const int   kInitialW     = 1280;
 const int   kInitialH     = 720;
 const float kClearLinear[4] = {0.12f, 0.12f, 0.14f, 1.0f};  // linear-space clear (ADR-0005)
 
-// Cube test asset — vertices sourced from assets/test/cube.obj (ADR-0001).
-// 8 interleaved Vertex entries: position/normal/uv; area-weighted per-vertex normals.
+// Cube test asset — vertices verbatim from assets/test/cube.obj (ADR-0001).
+// 8 interleaved Vertex entries: position/normal/uv.
+// Normals are vertex-corner-averaged (gen_placeholders.py output); NOT face-normal
+// aligned — the M1 fragment stage does not use them.
+// TODO(0008): this inline fixture is superseded when the M2 loader lands.
 const noto3d::renderer::Vertex kCubeVerts[] = {
     //  position                  normal                              uv
     {{ 0.5f, 0.5f, 0.5f},  { 0.333333f, 0.666667f, 0.666667f},  {0.5f, 0.5f}},  // 0
@@ -47,8 +50,9 @@ const noto3d::renderer::Vertex kCubeVerts[] = {
     {{-0.5f,-0.5f,-0.5f},  {-0.577350f,-0.577350f,-0.577350f},  {0.5f, 0.5f}},  // 6
     {{-0.5f,-0.5f, 0.5f},  {-0.408248f,-0.408248f, 0.816497f},  {0.5f, 0.5f}},  // 7
 };
-// Index array — mirrors face data from cube.obj (0-based); includes one
-// degenerate triangle from the generated asset (face 0: verts 0,0,1).
+// Index array — verbatim from cube.obj face data (0-based).
+// Triangle 0 (0,0,1) is degenerate (zero area); gen_placeholders.py artifact.
+// TODO(0008): 0008 loader canonicalizes geometry; this fixture is then superseded.
 const std::uint32_t kCubeIdx[] = {
     0,0,1,  0,1,2,   // right (+X)
     4,5,6,  4,6,7,   // left  (-X)
@@ -176,21 +180,26 @@ static int run(int frameLimit) {
     NOTO3D_INFO("M0_OK context 3.3+ core profile; renderer baseline configured");
 
     // ---- M1 — base shader + cube test asset (ADR-0001/0006) ---------------
+    // Both steps in one try block: shader throws on GLSL error; mesh upload is
+    // checked via glGetError (GL does not throw on OOM).
     std::optional<noto3d::renderer::ShaderProgram> baseShader;
+    std::optional<noto3d::renderer::Mesh>          cubeMesh;
     try {
-        baseShader = noto3d::renderer::ShaderProgram::fromFiles(
+        baseShader.emplace(noto3d::renderer::ShaderProgram::fromFiles(
             NOTO3D_SHADER_DIR "/base.vert",
-            NOTO3D_SHADER_DIR "/base.frag");
+            NOTO3D_SHADER_DIR "/base.frag"));
+        cubeMesh.emplace(kCubeVerts, kCubeIdx);
+        if (const GLenum glErr = glGetError(); glErr != GL_NO_ERROR) {
+            NOTO3D_ERROR("GL error {:#010x} after mesh upload", static_cast<unsigned>(glErr));
+            throw std::runtime_error("GL error after mesh upload");
+        }
     } catch (const std::exception& e) {
-        NOTO3D_CRITICAL("M1_FAIL: shader compilation failed — {}", e.what());
+        NOTO3D_CRITICAL("M1_FAIL: setup failed — {}", e.what());
         glfwDestroyWindow(window);
         glfwTerminate();
         return EXIT_FAILURE;
     }
-
-    noto3d::renderer::Mesh       cubeMesh(kCubeVerts, kCubeIdx);
     const noto3d::renderer::Material cubeMat{};  // defaults: white, opacity=1, cull=true
-
     NOTO3D_INFO("M1_OK cube mesh uploaded; base shader compiled");
 
     // ---- Render loop -------------------------------------------------------
@@ -214,13 +223,16 @@ static int run(int frameLimit) {
                                           glm::vec3(0.0f, 1.0f, 0.0f));
             const auto mvp  = proj * view;  // model = identity
 
+            // TODO(0007): cull-state toggle is a temporary per-draw workaround.
+            // 0007 Begin3DPass/End3DPass will own canonical state for the whole pass
+            // and handle per-material cullEnabled within a proper pass boundary.
             if (!cubeMat.cullEnabled) { glDisable(GL_CULL_FACE); }
             baseShader->use();
             baseShader->setMat4 ("uMVP",       mvp);
             baseShader->setVec4 ("uBaseColor", cubeMat.baseColor);
             baseShader->setFloat("uOpacity",   cubeMat.opacity);
-            glBindVertexArray(cubeMesh.vao());
-            glDrawElements(GL_TRIANGLES, cubeMesh.indexCount(), GL_UNSIGNED_INT, nullptr);
+            glBindVertexArray(cubeMesh->vao());
+            glDrawElements(GL_TRIANGLES, cubeMesh->indexCount(), GL_UNSIGNED_INT, nullptr);
             glBindVertexArray(0);
             if (!cubeMat.cullEnabled) { glEnable(GL_CULL_FACE); }
         }
@@ -228,7 +240,7 @@ static int run(int frameLimit) {
         ++frames;
     }
 
-    NOTO3D_INFO("M0_DONE rendered {} frames", frames);
+    NOTO3D_INFO("M1_DONE rendered {} frames", frames);
     glfwDestroyWindow(window);
     glfwTerminate();
     return EXIT_SUCCESS;

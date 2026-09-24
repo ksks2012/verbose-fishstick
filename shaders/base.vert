@@ -1,8 +1,9 @@
 #version 330 core
 
-layout(location = 0) in vec3 aPosition;
-layout(location = 1) in vec3 aNormal;
-layout(location = 2) in vec2 aUV;
+// layout locations match noto3d::renderer::Attrib constants (ADR-0006)
+layout(location = 0) in vec3 aPosition;  // Attrib::kPosition
+layout(location = 1) in vec3 aNormal;    // Attrib::kNormal
+layout(location = 2) in vec2 aUV;        // Attrib::kUV
 
 uniform mat4 uMVP;
 

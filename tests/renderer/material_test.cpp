@@ -18,7 +18,7 @@ bool near(float a, float b) { return std::abs(a - b) < 1e-6f; }
 }  // namespace
 
 int main() {
-    noto3d::core::log_init("noto3d-renderer-tests");
+    noto3d::core::log_init("noto3d-material-tests");
 
     using noto3d::renderer::Material;
     using noto3d::renderer::effectiveAlpha;
