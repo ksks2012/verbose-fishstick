@@ -74,6 +74,14 @@ FetchContent_Declare(imgui
     GIT_SHALLOW    TRUE
     SOURCE_DIR     ${IMGUI_DIR})
 
+# tinyobjloader — OBJ/MTL parser (ADR-0003, deferred to M2)
+set(TINYOBJ_DIR ${LIB_DIR}/tinyobjloader)
+FetchContent_Declare(tinyobjloader
+    GIT_REPOSITORY https://github.com/tinyobjloader/tinyobjloader.git
+    GIT_TAG        v1.0.6
+    GIT_SHALLOW    TRUE
+    SOURCE_DIR     ${TINYOBJ_DIR})
+
 # spdlog — structured logging backend for noto3d::core::Log (ADR-0008)
 set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_TESTS   OFF CACHE BOOL "" FORCE)
@@ -116,7 +124,14 @@ if(UNIX AND NOT APPLE)
     endif()
 endif()
 
-FetchContent_MakeAvailable(nlohmann_json glm imgui spdlog glfw)
+FetchContent_MakeAvailable(nlohmann_json glm imgui tinyobjloader spdlog glfw)
+
+# Suppress warnings from tinyobjloader headers when included by our code
+if(TARGET tinyobjloader)
+    set_target_properties(tinyobjloader PROPERTIES
+        INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
+            "$<TARGET_PROPERTY:tinyobjloader,INTERFACE_INCLUDE_DIRECTORIES>")
+endif()
 
 # Suppress compiler warnings from spdlog's own headers when included by our code
 if(TARGET spdlog)
@@ -165,6 +180,28 @@ target_link_libraries(noto3d-core-tests PRIVATE noto3d_core)
 noto3d_set_warnings(noto3d-core-tests)
 noto3d_apply_sanitizers(noto3d-core-tests)
 add_test(NAME core-gl-capability COMMAND noto3d-core-tests)
+
+# ---------------------------------------------------------------------------
+# Asset library (ADR-0007)
+# ---------------------------------------------------------------------------
+add_library(noto3d_asset STATIC
+    src/asset/asset_registry.cpp
+    src/asset/obj_loader.cpp)
+target_include_directories(noto3d_asset PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/asset)
+target_link_libraries(noto3d_asset
+    PUBLIC  noto3d_renderer nlohmann_json::nlohmann_json
+    PRIVATE tinyobjloader)
+noto3d_set_warnings(noto3d_asset)
+noto3d_apply_sanitizers(noto3d_asset)
+
+add_executable(noto3d-registry-tests tests/asset/registry_test.cpp)
+target_link_libraries(noto3d-registry-tests PRIVATE noto3d_asset)
+target_compile_definitions(noto3d-registry-tests PRIVATE
+    NOTO3D_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
+noto3d_set_warnings(noto3d-registry-tests)
+noto3d_apply_sanitizers(noto3d-registry-tests)
+add_test(NAME asset-registry-contract COMMAND noto3d-registry-tests)
 
 # ---------------------------------------------------------------------------
 # Renderer library (ADR-0006)
