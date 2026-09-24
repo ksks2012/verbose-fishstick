@@ -1,23 +1,25 @@
-# 0005 — M1 mesh GPU upload (ADR-0006)
+# 0005 — M1 Mesh GPU upload (ADR-0006)
 
 **What to build:**
 
-First renderer deliverable: the immutable mesh pipeline. Define the noto3d::renderer Mesh type
-that owns a single interleaved VBO + EBO + VAO, uploads once, and is immutable after upload.
+Pure GPU resource ticket. Define `noto3d::renderer::Vertex` and an immutable `renderer::Mesh`
+that owns a single interleaved VBO + EBO + VAO and uploads once. This ticket has **no rendering
+obligation** — the first draw is 0006's job, pass hygiene is 0007's job.
 
 Contract (ADR-0006):
-- Vertex = interleaved `position vec3 + normal vec3 + uv vec2`, **32 B stride**; enforce with a
+- `Vertex` = interleaved `position vec3 + normal vec3 + uv vec2`, **32 B stride**; enforced with
   `static_assert(sizeof(Vertex) == 32)`. No tangent/bitangent.
-- Indices are always `GL_UNSIGNED_INT` (real meshes may exceed 65,535 verts; uniform path).
-- Mesh is immutable after GPU upload: one upload, deleted copy, movable; no future vertex-edit API.
-- Render via the explicit cube test asset only (ADR-0001 — the cube is a test asset, never an
-  implicit fallback). Placeholder OBJ loading is deferred to M2/0008; M1 feeds known-good CPU data.
-- Data is authored Y-up (ADR-0005); axis correction is baked by the loader (M2), not here.
+- Indices are always `GL_UNSIGNED_INT`.
+- CPU vertex/index arrays are **constructor/upload inputs**; `Mesh` does not expose a vertex/index
+  mutation API after upload. Whether `Mesh` retains the CPU copy is implementation freedom.
+- GPU handles have **single ownership and are released exactly once** (RAII); move operations
+  transfer ownership; a moved-from `Mesh` must be safely destructible.
+- Data is authored Y-up (ADR-0005); axis correction is baked by the M2 loader, not here.
 
-Deliverable: a cube rendered with the base GLSL 330 shaders produced by 0006, visible in the
-window with depth/cull/blend uses coming from 0007. No pass hygiene yet (0007 owns that).
+Delivered to 0006: a `Mesh` that 0006 can fill with the cube test asset and draw through the base
+shaders (ADR-0001 — the cube is an explicit test asset, never an implicit fallback).
 
-**Blocked by:** none (M1 start)
+**Blocked by:** none
 
 **Status:** ready-for-agent
 
@@ -25,7 +27,8 @@ window with depth/cull/blend uses coming from 0007. No pass hygiene yet (0007 ow
 - [ ] `renderer::Mesh` owns interleaved VBO + EBO + VAO; uploaded once; immutable after upload;
       movable, non-copyable
 - [ ] Indices bound as `GL_UNSIGNED_INT`
-- [ ] Explicit cube test asset renders through M1 shaders (manual renderer verification, ADR-0008)
-- [ ] Y-up authoring respected; axis correction left to the M2 loader (placeholder data is Y-up)
+- [ ] CPU arrays are construction inputs; no post-upload vertex/index mutation API
+- [ ] GPU handles released exactly once (RAII); move transfers ownership; moved-from safe
+- [ ] No rendering or state obligations (first draw = 0006, pass state = 0007)
 
 **Points to ADR:** 0006 (mesh contract), 0001 (cube = explicit test asset only)

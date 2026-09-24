@@ -68,9 +68,12 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
       (authored as ticket 0010).
 
 ## Post-M0 execution tickets (docs/ticket/)
-- 0005–0007 M1 minimal renderer (mesh upload / material+shaders / pass hygiene)
-- 0008–0009 M2 asset pipeline (AssetRegistry+OBJ chain / sRGB diffuse texture)
-- 0010 dependency pinning upgrade (ADR-0003 watch item)
+- 0005–0007 M1 minimal renderer: 0005 mesh GPU upload → 0006 Model/Material/shader + first draw
+  (cube) → 0007 pass hygiene (Begin3DPass/End3DPass)
+- 0008–0009 M2 asset pipeline: 0008 AssetRegistry + OBJ/MTL→Mesh (reuses 0005 renderer::Mesh;
+  MTL grouping into SubMesh; FAILED = unavailable, no implicit cube) → 0009 sRGB diffuse texture
+  (GL_SRGB8_ALPHA8; finalAlpha = effectiveAlpha * sampledAlpha)
+- 0010 dependency pinning hardening (ADR-0003 watch item; blocked by M0, parallel track)
 
 ## Known MVP limitations
 - No transparent-object depth sorting.
