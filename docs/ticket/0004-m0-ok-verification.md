@@ -20,12 +20,12 @@ context; debug GL context off in release, on in dev only after verifying `GL_KHR
 
 **Status:** ready-for-agent
 
-- [ ] `supportsRequiredContext(major, minor, profileMask)` exists as a dependency-free pure
+- [x] `supportsRequiredContext(major, minor, profileMask)` exists as a dependency-free pure
       function (no fabricated context needed)
-- [ ] Test matrix passes: 3.3 core → `true`; 4.6 core → `true`; 3.2 core → `false`;
+- [x] Test matrix passes: 3.3 core → `true`; 4.6 core → `true`; 3.2 core → `false`;
       3.3 compatibility → `false`
-- [ ] `./build/<preset>/noto3d-editor --frames=5` prints `M0_OK` (3.3+ core profile) then
+- [x] `./build/<preset>/noto3d-editor --frames=5` prints `M0_OK` (3.3+ core profile) then
       `M0_DONE rendered 5 frames` and exits 0
-- [ ] Failure path prints `M0_FAIL <reason>` and exits non-zero
-- [ ] sRGB + MSAA 4 + depth 24 hints are applied on the created context
-- [ ] Debug GL context is off in release; on in dev only after `GL_KHR_debug` is verified present
+- [x] Failure path prints `M0_FAIL <reason>` and exits non-zero
+- [x] sRGB + MSAA 4 + depth 24 hints are applied on the created context
+- [x] Debug GL context is off in release; on in dev only after `GL_KHR_debug` is verified present

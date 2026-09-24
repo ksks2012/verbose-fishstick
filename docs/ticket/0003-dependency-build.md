@@ -19,10 +19,10 @@ ticket — its deliverable is a green dependency build, not runtime behavior.
 
 **Status:** ready-for-agent
 
-- [ ] A fresh configure completes with all clones landing in `lib/<name>` at their pinned tags
-- [ ] GLFW 3.4 (X11) builds
-- [ ] ImGui STATIC + GLFW/OpenGL3 backends build
-- [ ] GLM, nlohmann/json, glad, and stb wires compile
-- [ ] The `noto3d-editor` binary is produced by the build
-- [ ] `lib/glad`, `lib/stb` are present and committed-in-principle; the four fetched clones remain
+- [x] A fresh configure completes with all clones landing in `lib/<name>` at their pinned tags
+- [x] GLFW 3.4 (X11) builds
+- [x] ImGui STATIC + GLFW/OpenGL3 backends build
+- [x] GLM, nlohmann/json, glad, and stb wires compile
+- [x] The `noto3d-editor` binary is produced by the build
+- [x] `lib/glad`, `lib/stb` are committed (`d033f50`); the four fetched clones remain
       gitignored (ADR-0003 filesystem contract holds)

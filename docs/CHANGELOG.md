@@ -1,10 +1,27 @@
 # CHANGELOG
 
-## [Unreleased] — M0 / M0.5 (in progress)
+## [Unreleased] — M0 / M0.5 (complete); M1 not started
 - Grilling session Q1–Q8 closed; foundation decision tree complete (ADR-0001..0008).
 - Repository initialized on `main`; Q1–Q8 recorded as ADRs; CONTEXT.md established.
 
-### M0
+### M0 — build & environment (execution complete)
+- Execution tickets 0002–0004 closed (Q9 prerequisites / dependency build / M0_OK verification);
+  acceptance matrix in `docs/ticket/0001` fully checked; ctest green on dev, dev-clean, release.
+- `noto3d::core::Log` introduced; DPI-safe viewport with framebuffer-size resize callback
+  (ADR-0004); debug-GL gated on `GL_KHR_debug` verification before use.
+- Non-interactive verification proven: `--frames=5` → `M0_OK … 3.3+ core profile` +
+  `M0_DONE rendered 5 frames`, exit 0; failure path prints `M0_FAIL <reason>` and exits non-zero
+  (verified with DISPLAY unset). sRGB + MSAA 4 + depth 24 hints validated on the created context.
+- `supportsRequiredContext(major, minor, profileMask)` extracted as a dependency-free pure
+  function (`src/core/gl_capability.{hpp,cpp}`); 4-case matrix CTest under `tests/` per ADR-0008
+  (3.3 / 4.6 core → ok; 3.2 core / 3.3 compatibility → fail).
+- `lib/glad` + `lib/stb` committed (non-fetchable exceptions, ADR-0003); all fetched clones stay
+  gitignored.
+- Q9 machine prerequisite set finalized: `sudo apt install libxinerama-dev libxcursor-dev libxi-dev`;
+  GLFW built X11-only (`GLFW_BUILD_WAYLAND=OFF`) so its Wayland xkbcommon probe never requires
+  pkg-config. Clean configure + full dependency build now green on all presets.
+
+### M0 — initial wiring (historical)
 - Dependency layout mirrors ../reimagined-meme: external libs live in `lib/` — GLFW 3.4,
   GLM 1.0.1, ImGui v1.92.9-docking, nlohmann/json v3.11.3 cloned there via FetchContent explicit
   `SOURCE_DIR` (gitignored); glad (GL 3.3 Core) + stb_image committed as non-fetchable exceptions.
