@@ -167,6 +167,24 @@ noto3d_apply_sanitizers(noto3d-core-tests)
 add_test(NAME core-gl-capability COMMAND noto3d-core-tests)
 
 # ---------------------------------------------------------------------------
+# Renderer library (ADR-0006)
+# ---------------------------------------------------------------------------
+add_library(noto3d_renderer STATIC
+    src/renderer/mesh.cpp)
+target_include_directories(noto3d_renderer PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/renderer)
+target_link_libraries(noto3d_renderer
+    PUBLIC  noto3d_core glm::glm glad)
+noto3d_set_warnings(noto3d_renderer)
+noto3d_apply_sanitizers(noto3d_renderer)
+
+add_executable(noto3d-renderer-tests tests/renderer/mesh_test.cpp)
+target_link_libraries(noto3d-renderer-tests PRIVATE noto3d_renderer)
+noto3d_set_warnings(noto3d-renderer-tests)
+noto3d_apply_sanitizers(noto3d-renderer-tests)
+add_test(NAME renderer-mesh-contract COMMAND noto3d-renderer-tests)
+
+# ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
 add_executable(noto3d-editor src/app/main.cpp)
