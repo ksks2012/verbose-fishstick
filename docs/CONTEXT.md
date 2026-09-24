@@ -64,7 +64,13 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
 ## Watch items
 - [ ] Official Noto 3D OBJ release — when published, update manifest geometry_source → official
       for curated IDs, verify winding/axis against M0.5 contract, re-pin sources.
-- [ ] Replace GIT_TAG pins with commit SHA (+ URL_HASH) once dev build is stable.
+- [ ] Replace GIT_TAG pins with commit SHA (+ URL_HASH) once dev build is stable
+      (authored as ticket 0010).
+
+## Post-M0 execution tickets (docs/ticket/)
+- 0005–0007 M1 minimal renderer (mesh upload / material+shaders / pass hygiene)
+- 0008–0009 M2 asset pipeline (AssetRegistry+OBJ chain / sRGB diffuse texture)
+- 0010 dependency pinning upgrade (ADR-0003 watch item)
 
 ## Known MVP limitations
 - No transparent-object depth sorting.
