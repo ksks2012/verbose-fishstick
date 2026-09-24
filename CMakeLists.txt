@@ -170,7 +170,8 @@ add_test(NAME core-gl-capability COMMAND noto3d-core-tests)
 # Renderer library (ADR-0006)
 # ---------------------------------------------------------------------------
 add_library(noto3d_renderer STATIC
-    src/renderer/mesh.cpp)
+    src/renderer/mesh.cpp
+    src/renderer/shader_program.cpp)
 target_include_directories(noto3d_renderer PUBLIC
     ${CMAKE_SOURCE_DIR}/src/renderer)
 target_link_libraries(noto3d_renderer
@@ -184,13 +185,20 @@ noto3d_set_warnings(noto3d-renderer-tests)
 noto3d_apply_sanitizers(noto3d-renderer-tests)
 add_test(NAME renderer-mesh-contract COMMAND noto3d-renderer-tests)
 
+add_executable(noto3d-material-tests tests/renderer/material_test.cpp)
+target_link_libraries(noto3d-material-tests PRIVATE noto3d_renderer)
+noto3d_set_warnings(noto3d-material-tests)
+noto3d_apply_sanitizers(noto3d-material-tests)
+add_test(NAME renderer-material-contract COMMAND noto3d-material-tests)
+
 # ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
 add_executable(noto3d-editor src/app/main.cpp)
 target_link_libraries(noto3d-editor PRIVATE
-    glfw glad glm::glm nlohmann_json::nlohmann_json imgui noto3d_core)
+    glfw glad glm::glm nlohmann_json::nlohmann_json imgui noto3d_renderer)
 target_compile_definitions(noto3d-editor PRIVATE
-    NOTO3D_DEBUG_GL=$<BOOL:${NOTO3D_DEBUG_GL}>)
+    NOTO3D_DEBUG_GL=$<BOOL:${NOTO3D_DEBUG_GL}>
+    NOTO3D_SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders")
 noto3d_set_warnings(noto3d-editor)
 noto3d_apply_sanitizers(noto3d-editor)
