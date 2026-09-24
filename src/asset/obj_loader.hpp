@@ -30,9 +30,15 @@ struct ObjLoadResult {
 
 // Parse an OBJ (+MTL if present) into canonical CPU data.
 // No GL calls; safe to call without an active context.
-// Missing normals → area-weighted vertex normals + count (ADR-0006).
-// Missing UVs    → canonical (0,0) + count (ADR-0006).
+//
+//   * Shapes are split by contiguous material runs ("usemtl" regions) into
+//     separate CanonicalShapes — each becomes a SubMesh boundary (ADR-0006/0007).
+//   * Missing normals → area-weighted vertex normals + count (ADR-0006).
+//   * Missing UVs    → canonical (0,0) + count (ADR-0006).
+//   * upAxis (default "y") is baked into positions+normals once at load
+//     (Y-up pipeline, rotation-only so winding is preserved; ADR-0006/0007).
 ObjLoadResult loadObjShapes(const std::filesystem::path& objPath,
-                             const std::string&           assetId);
+                             const std::string&           assetId,
+                             const std::string&           upAxis = "y");
 
 }  // namespace noto3d::asset

@@ -5,8 +5,10 @@
 #include "log.hpp"
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <cstddef>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -30,10 +32,13 @@ struct VKeyHash {
     }
 };
 
-CanonicalShape buildShape(
+// Faces [faceBegin, faceEnd) of `shape` → one canonical CPU shape.
+CanonicalShape buildShapeFromFaces(
     const tinyobj::attrib_t&   attrib,
     const tinyobj::shape_t&    shape,
-    const tinyobj::material_t* mat,      // nullptr if no material
+    std::size_t                faceBegin,
+    std::size_t                faceEnd,
+    const tinyobj::material_t* mat,          // nullptr → default material
     ObjLoadResult&             out)
 {
     CanonicalShape cs;
@@ -52,42 +57,45 @@ CanonicalShape buildShape(
     std::vector<bool> needsNormal;
     int uvWarn = 0;
 
-    for (const auto& idx : shape.mesh.indices) {
-        VKey key{idx.vertex_index, idx.normal_index, idx.texcoord_index};
-        auto it = vertexMap.find(key);
-        if (it == vertexMap.end()) {
-            renderer::Vertex v;
+    for (std::size_t fi = faceBegin; fi < faceEnd; ++fi) {
+        for (int k = 0; k < 3; ++k) {
+            const auto& idx = shape.mesh.indices[fi * 3 + k];
+            VKey key{idx.vertex_index, idx.normal_index, idx.texcoord_index};
+            auto it = vertexMap.find(key);
+            if (it == vertexMap.end()) {
+                renderer::Vertex v;
 
-            const auto vi = static_cast<std::size_t>(idx.vertex_index);
-            v.position = glm::vec3(attrib.vertices[3 * vi],
-                                   attrib.vertices[3 * vi + 1],
-                                   attrib.vertices[3 * vi + 2]);
+                const auto vi = static_cast<std::size_t>(idx.vertex_index);
+                v.position = glm::vec3(attrib.vertices[3 * vi],
+                                       attrib.vertices[3 * vi + 1],
+                                       attrib.vertices[3 * vi + 2]);
 
-            if (idx.normal_index >= 0) {
-                const auto ni = static_cast<std::size_t>(idx.normal_index);
-                v.normal = glm::vec3(attrib.normals[3 * ni],
-                                     attrib.normals[3 * ni + 1],
-                                     attrib.normals[3 * ni + 2]);
-                needsNormal.push_back(false);
-            } else {
-                v.normal = glm::vec3(0.0f, 1.0f, 0.0f);  // placeholder; replaced below
-                needsNormal.push_back(true);
+                if (idx.normal_index >= 0) {
+                    const auto ni = static_cast<std::size_t>(idx.normal_index);
+                    v.normal = glm::vec3(attrib.normals[3 * ni],
+                                         attrib.normals[3 * ni + 1],
+                                         attrib.normals[3 * ni + 2]);
+                    needsNormal.push_back(false);
+                } else {
+                    v.normal = glm::vec3(0.0f, 1.0f, 0.0f);  // placeholder; replaced below
+                    needsNormal.push_back(true);
+                }
+
+                if (idx.texcoord_index >= 0) {
+                    const auto ti = static_cast<std::size_t>(idx.texcoord_index);
+                    v.uv = glm::vec2(attrib.texcoords[2 * ti],
+                                     attrib.texcoords[2 * ti + 1]);
+                } else {
+                    v.uv = glm::vec2(0.0f, 0.0f);  // canonical (0,0) per ADR-0006
+                    ++uvWarn;
+                }
+
+                const auto newIdx = static_cast<std::uint32_t>(cs.vertices.size());
+                it = vertexMap.emplace(key, newIdx).first;
+                cs.vertices.push_back(v);
             }
-
-            if (idx.texcoord_index >= 0) {
-                const auto ti = static_cast<std::size_t>(idx.texcoord_index);
-                v.uv = glm::vec2(attrib.texcoords[2 * ti],
-                                 attrib.texcoords[2 * ti + 1]);
-            } else {
-                v.uv = glm::vec2(0.0f, 0.0f);  // canonical (0,0) per ADR-0006
-                ++uvWarn;
-            }
-
-            const auto newIdx = static_cast<std::uint32_t>(cs.vertices.size());
-            it = vertexMap.emplace(key, newIdx).first;
-            cs.vertices.push_back(v);
+            cs.indices.push_back(it->second);
         }
-        cs.indices.push_back(it->second);
     }
 
     // Area-weighted normal computation for vertices with no OBJ normal (ADR-0006)
@@ -125,10 +133,76 @@ CanonicalShape buildShape(
     return cs;
 }
 
+int matIdAt(const tinyobj::shape_t& shape, std::size_t face) {
+    if (shape.mesh.material_ids.empty()) return -1;
+    if (face >= shape.mesh.material_ids.size()) return -1;
+    return shape.mesh.material_ids[face];
+}
+
+// Split one tinyobj shape into canonical shapes by contiguous material runs —
+// each "usemtl" region becomes a SubMesh boundary (ADR-0006/0007).
+void splitShapeByMaterial(
+    const tinyobj::attrib_t&             attrib,
+    const tinyobj::shape_t&              shape,
+    const std::vector<tinyobj::material_t>& materials,
+    ObjLoadResult&                       out)
+{
+    const std::size_t faceCount = shape.mesh.indices.size() / 3;
+    if (faceCount == 0) return;
+
+    std::size_t runBegin = 0;
+    while (runBegin < faceCount) {
+        const int firstMat = matIdAt(shape, runBegin);
+        std::size_t runEnd = runBegin + 1;
+        while (runEnd < faceCount && matIdAt(shape, runEnd) == firstMat) {
+            ++runEnd;
+        }
+
+        const tinyobj::material_t* mat = nullptr;
+        if (firstMat >= 0 && firstMat < static_cast<int>(materials.size())) {
+            mat = &materials[static_cast<std::size_t>(firstMat)];
+        }
+
+        out.shapes.push_back(
+            buildShapeFromFaces(attrib, shape, runBegin, runEnd, mat, out));
+        runBegin = runEnd;
+    }
+}
+
+// Rotation-only Y-up correction: source axis → +Y (ADR-0006/0007, baked once).
+// Pure rotation is orientation-preserving, so winding is left intact.
+glm::mat3 upAxisCorrection(const std::string& upAxis) {
+    if (upAxis == "z") {
+        // Rx(-90°): (x,y,z) → (x,z,-y);  source +Z → +Y
+        return glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f),
+                                     glm::vec3(1, 0, 0)));
+    }
+    if (upAxis == "x") {
+        // Rz(+90°): (x,y,z) → (-y,x,z);  source +X → +Y
+        return glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(90.0f),
+                                     glm::vec3(0, 0, 1)));
+    }
+    return glm::mat3(1.0f);  // "y" or unknown → identity (no-op)
+}
+
+void applyAxisCorrection(const std::string& upAxis,
+                         std::vector<CanonicalShape>& shapes) {
+    if (upAxis != "x" && upAxis != "z") return;
+    const glm::mat3 rot = upAxisCorrection(upAxis);
+    NOTO3D_DEBUG("[asset] baked axis correction: up_axis='{}'", upAxis);
+    for (auto& s : shapes) {
+        for (auto& v : s.vertices) {
+            v.position = rot * v.position;
+            v.normal   = rot * v.normal;
+        }
+    }
+}
+
 }  // namespace
 
 ObjLoadResult loadObjShapes(const std::filesystem::path& objPath,
-                             const std::string&           assetId) {
+                            const std::string&           assetId,
+                            const std::string&           upAxis) {
     ObjLoadResult result;
     result.status = LoadStatus::Success;
 
@@ -137,10 +211,17 @@ ObjLoadResult loadObjShapes(const std::filesystem::path& objPath,
     std::vector<tinyobj::material_t> materials;
     std::string err;
 
+    // tinyobj concatenates the base dir with the mtllib name verbatim
+    // (m_mtlBaseDir + matId, no separator) — ensure a trailing slash.
+    std::string mtlBase = objPath.parent_path().string();
+    if (!mtlBase.empty() && mtlBase.back() != '/') {
+        mtlBase.push_back('/');
+    }
+
     const bool ok = tinyobj::LoadObj(
         &attrib, &shapes, &materials, &err,
         objPath.string().c_str(),
-        objPath.parent_path().string().c_str());
+        mtlBase.c_str());
 
     if (!err.empty()) {
         NOTO3D_WARN("[asset] OBJ messages for {}: {}", assetId, err);
@@ -158,17 +239,11 @@ ObjLoadResult loadObjShapes(const std::filesystem::path& objPath,
     }
 
     for (const auto& shape : shapes) {
-        int matId = -1;
-        if (!shape.mesh.material_ids.empty()) {
-            matId = shape.mesh.material_ids[0];
-        }
-        const tinyobj::material_t* mat =
-            (matId >= 0 && matId < static_cast<int>(materials.size()))
-            ? &materials[static_cast<std::size_t>(matId)]
-            : nullptr;
-
-        result.shapes.push_back(buildShape(attrib, shape, mat, result));
+        splitShapeByMaterial(attrib, shape, materials, result);
     }
+
+    // Y-up axis correction baked once into the canonical CPU data (ADR-0006/0007)
+    applyAxisCorrection(upAxis, result.shapes);
 
     if (result.normalWarnings > 0 || result.uvWarnings > 0) {
         result.status = LoadStatus::LoadedWithWarnings;

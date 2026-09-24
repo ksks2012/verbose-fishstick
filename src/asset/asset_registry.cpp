@@ -199,8 +199,8 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
             continue;
         }
 
-        // Load OBJ to CPU (no GL)
-        ObjLoadResult obj = loadObjShapes(canonPath, entry.id);
+        // Load OBJ to CPU (no GL); up_axis baked into canonical CPU data (ADR-0006/0007)
+        ObjLoadResult obj = loadObjShapes(canonPath, entry.id, entry.upAxis);
 
         if (!obj.errorMessage.empty()) {
             m_diagnostics.push_back({entry.id, obj.errorMessage, obj.status});
@@ -222,6 +222,14 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
             rec.status = LoadStatus::Failed;
             m_records.push_back(std::move(rec));
             continue;
+        }
+
+        // Defensive: only x/y/z are known axes; unknown → no correction + warning
+        if (entry.upAxis != "x" && entry.upAxis != "y" && entry.upAxis != "z") {
+            m_diagnostics.push_back({entry.id,
+                "unsupported up_axis '" + entry.upAxis +
+                    "'; no axis correction applied",
+                LoadStatus::LoadedWithWarnings});
         }
 
         if (mode == Mode::Full) {
