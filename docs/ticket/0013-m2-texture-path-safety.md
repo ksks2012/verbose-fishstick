@@ -9,22 +9,31 @@ crafted or mis-authored MTL file could therefore escape the asset directory via 
 same class of path traversal that manifest fields already guard against.
 
 Contract:
-- Before `Texture::fromFile()` is called in `uploadToGpu()`, validate `diffuseTextureRef`:
-  - Reject absolute paths (starts with `/` or `\`).
-  - Reject `../` traversal sequences.
-  - On rejection: log a diagnostic at `LoadedWithWarnings`, leave `material.texture` unset
-    (asset still renders with `baseColor` only; no FAILED).
-- The validation must use the same predicate as the manifest path check in `asset_registry.cpp`
-  (extract `unsafePath()` into a shared utility or apply it inline with the same rules).
+- Before `Texture::fromFile()` is called in `uploadToGpu()`, validate `diffuseTextureRef` by
+  **reusing the existing manifest path-safety predicate** (extract `unsafePath()` in
+  `asset_registry.cpp` into a shared utility, or call the same predicate inline). Same rules, no
+  duplicated or re-invented path grammar — this ticket does not re-specify what is / is not an
+  absolute or `../` path; that is defined once by the manifest predicate (covering e.g.
+  `foo/../../bar` while not misjudging `foo..bar`).
+- On rejection: **promote an otherwise successful asset load to `LOADED_WITH_WARNINGS`**
+  (0008 tri-state: SUCCESS / LOADED_WITH_WARNINGS / FAILED), log a diagnostic, and leave
+  `material.diffuseTextureRef` unset (asset still renders with `baseColor` only; not FAILED). A
+  rejected optional diffuse texture must not destroy otherwise valid geometry — a plain
+  `log + texture = null + SUCCESS` would break the tri-state contract and is not acceptable.
 - `reference_image` remains unaffected (it is never uploaded; this ticket is about MTL textures).
+- This is a **hardening pass after 0009**, not a prerequisite of 0009 or 0014: 0014 conforms to
+  the ADR-0007 path contract when authoring its fixture; 0013 turns that contract into enforced
+  shared code.
 
 **Blocked by:** 0009
 
 **Status:** ready-for-agent
 
-- [ ] `diffuseTextureRef` validated for absolute path / `../` before `Texture::fromFile()` call
-- [ ] Rejected texture ref → `LoadedWithWarnings` diagnostic; `material.texture` left unset
+- [ ] `diffuseTextureRef` validated via the shared manifest path-safety predicate before the
+      `Texture::fromFile()` call
+- [ ] Rejected texture ref → overall asset load promoted to `LOADED_WITH_WARNINGS`;
+      `material.diffuseTextureRef` left unset; asset still renders with `baseColor`
 - [ ] Same predicate as the manifest geometry-path check (no duplicated logic)
-- [ ] Headless test: OBJ with MTL `map_Kd ../escape.png` → diagnostic recorded, texture unset
+- [ ] Headless test: OBJ with MTL `map_Kd ../escape.png` → `LOADED_WITH_WARNINGS`, texture ref unset
 
 **Points to ADR:** 0007 (path safety: no absolute paths, no `../`, no runtime network)

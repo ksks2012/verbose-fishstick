@@ -12,7 +12,8 @@ Document hierarchy:
 C++/OpenGL editor MVP for Noto 3D-style emoji composition ("emoji_editor").
 
 ## Current milestone
-M0 (Environment/build) + M0.5 (Asset contract spike). Renderer (M1) explicitly NOT started yet.
+M2 Asset Pipeline in progress. M0 (Environment/build) + M0.5 (Asset contract spike) and M1
+Minimal Renderer are complete. Current M2 execution chain: 0008 → 0014 → 0009 → 0013.
 M0 scope, user stories and acceptance matrix: `docs/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
 
@@ -26,7 +27,8 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   loading — never `if (load_failed) useCube()`); asset absence/failure must never block renderer
   development (the M0.5 spike precedes M1).
 - ADR-0002: Official 3D PNG = reference_image (metadata-only); placeholder OBJ = geometry driver;
-  `geometry_source` swap is the only migration. Curated 5–8 PNGs across minimal placeholders.
+  geometry changes are manifest-level migrations without Scene schema changes (no
+  `geometry_source`-swap-only narrowing). Curated 5–8 PNGs across minimal placeholders.
 - ADR-0003: Project-owned deps need no sudo/apt/pkg-config/ninja; filesystem contract = external
   libs live in `lib/<name>` (mirrors ../reimagined-meme), fetched via FetchContent explicit
   `SOURCE_DIR` (never `build/_deps`): GLFW 3.4 X11, GLM 1.0.1, ImGui v1.92.9-docking,
@@ -50,7 +52,8 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   `geometry != null → geometry_source ∈ {placeholder, official}` and
   `geometry == null → geometry_source == null`; reference_image metadata-only; relative paths,
   no `../`, no runtime network; axis baked at load; dedup by canonical path; SUCCESS/WARN/FAILED;
-  FAILED = disable + diagnostic, no implicit fallback (sole explicit opt-in:
+  FAILED = asset unavailable + diagnostic; scene/entity consumers must not render failed assets, no
+  implicit fallback (sole explicit opt-in:
   `fallback_geometry?`, unset for all MVP assets); explicit reload() only.
 - ADR-0008: C++20; noto3d::* namespaces; src/app|core|renderer|asset|scene|serialization|ui;
   boundary exceptions, no-throw render loop; custom Log; -Wall -Wextra -Wpedantic, -Werror optional;
@@ -68,11 +71,21 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
       (authored as ticket 0010).
 
 ## Post-M0 execution tickets (docs/ticket/)
-- 0005–0007 M1 minimal renderer: 0005 mesh GPU upload → 0006 Model/Material/shader + first draw
-  (cube) → 0007 pass hygiene (Begin3DPass/End3DPass)
-- 0008–0009 M2 asset pipeline: 0008 AssetRegistry + OBJ/MTL→Mesh (reuses 0005 renderer::Mesh;
-  MTL grouping into SubMesh; FAILED = unavailable, no implicit cube) → 0009 sRGB diffuse texture
-  (GL_SRGB8_ALPHA8; finalAlpha = effectiveAlpha * sampledAlpha)
+- 0005–0006 M1 minimal renderer (committed): 0005 mesh GPU upload → 0006 Model/Material/shader +
+  first draw (cube)
+- 0007 M1 pass hygiene — **superseded by 0012** (extract `renderer::Renderer` + Begin3DPass)
+- 0011 M1 code-quality deferred findings — folds into the 0012 main.cpp restructure (⑦⑧⑨) and
+  renderer work (⑩); blocked by 0012
+- 0012 M1 app/renderer separation (supersedes 0007): `renderer::Renderer` + slim main.cpp;
+  blocked by 0009
+- 0008–0014–0009 M2 asset pipeline (linear chain): 0008 AssetRegistry + OBJ/MTL→Mesh → 0014 demo
+  fixture subtree (`assets/geometry/placeholders/demo_checker/` with `textures/demo_checker.png`;
+  manifest v1 unchanged; `map_Kd` relative, no `../`; ready-for-agent) → 0009 sRGB diffuse texture
+  pipeline consuming the fixture (GL_SRGB8_ALPHA8; finalAlpha = effectiveAlpha * sampledAlpha;
+  uHasTexture branch; core committed `6225dac`, E2E verification blocked by 0014). Fixture
+  ownership: 0014 builds, 0009 consumes.
+- 0013 M2 texture path safety (hardens the ADR-0007 path contract after 0009 via the shared
+  predicate; rejected diffuseTextureRef → LOADED_WITH_WARNINGS); not a prerequisite of 0014
 - 0010 dependency pinning hardening (ADR-0003 watch item; blocked by M0, parallel track)
 
 ## Known MVP limitations
