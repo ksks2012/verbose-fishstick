@@ -27,6 +27,7 @@ public:
     void setMat4 (const char* name, const glm::mat4& v) const;
     void setVec4 (const char* name, const glm::vec4& v) const;
     void setFloat(const char* name, float v)             const;
+    void setInt  (const char* name, int v)               const;
 
 private:
     explicit ShaderProgram(GLuint program) noexcept;

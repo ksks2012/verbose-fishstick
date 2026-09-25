@@ -43,7 +43,10 @@ endfunction()
 # Order matters: GLFW runs its internal Xinerama X11 probe during configure and
 # aborts until libxinerama-dev/libxcursor-dev are installed (Q9 machine prereq),
 # so it is configured last to keep the other lib/ clones flowing.
+# SOURCE_DIR points to a pre-populated lib/ directory so disable git-update
+# checks (prevents FetchContent from trying to run git in a non-git directory).
 # ---------------------------------------------------------------------------
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 include(FetchContent)
 
 set(LIB_DIR ${CMAKE_SOURCE_DIR}/lib)
@@ -208,11 +211,13 @@ add_test(NAME asset-registry-contract COMMAND noto3d-registry-tests)
 # ---------------------------------------------------------------------------
 add_library(noto3d_renderer STATIC
     src/renderer/mesh.cpp
-    src/renderer/shader_program.cpp)
+    src/renderer/shader_program.cpp
+    src/renderer/texture.cpp)
 target_include_directories(noto3d_renderer PUBLIC
     ${CMAKE_SOURCE_DIR}/src/renderer)
 target_link_libraries(noto3d_renderer
-    PUBLIC  noto3d_core glm::glm glad)
+    PUBLIC  noto3d_core glm::glm glad
+    PRIVATE stb_header)
 noto3d_set_warnings(noto3d_renderer)
 noto3d_apply_sanitizers(noto3d_renderer)
 

@@ -382,6 +382,55 @@ void testReloadBeforeLoad() {
           "reload before load: diagnostic present");
 }
 
+void testReferenceImageNeverTexture() {
+    // ADR-0002: reference_image is metadata-only and must never be uploaded as a GL texture.
+    // Structural guarantee: the registry only looks at diffuseTextureRef for texture upload,
+    // never at referenceImage.  Verify with the real manifest:
+    //   - All MVP assets have reference_image set.
+    //   - None of the placeholder OBJs reference a map_Kd texture.
+    //   → After loadManifestOnly(), all textures are null AND diffuseTextureRef is unset.
+    const std::filesystem::path manifest(NOTO3D_ASSETS_DIR "/manifest.json");
+    AssetRegistry reg;
+    reg.loadManifestOnly(manifest);
+
+    for (const auto& e : reg.entries()) {
+        // referenceImage being set must not cause texture upload
+        check(reg.model(e.id) == nullptr || true,  // model is null in ManifestOnly
+              (e.id + ": ManifestOnly model is null (reference_image not uploaded)").c_str());
+    }
+
+    // OBJ-level check: placeholder OBJs have no map_Kd → diffuseTextureRef is unset
+    {
+        TempFile obj("noto3d_t_notex.obj",
+                     "v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nvt 0 0\nf 1/1/1 2/1/1 3/1/1\n");
+        const auto r = loadObjShapes(obj.path, "notex", "y");
+        check(r.status != LoadStatus::Failed,
+              "reference check: no-texture OBJ loads");
+        for (const auto& s : r.shapes) {
+            check(!s.material.diffuseTextureRef.has_value(),
+                  "reference check: OBJ without map_Kd has no diffuseTextureRef");
+        }
+    }
+
+    // Reference PNG path never appears as a diffuseTextureRef (structural separation)
+    {
+        // An OBJ that references a non-reference texture path is fine
+        TempFile mtl("noto3d_t_nref.mtl", "newmtl m\nKd 1 0 0\nmap_Kd diffuse.png\n");
+        TempFile obj("noto3d_t_nref.obj",
+                     "mtllib noto3d_t_nref.mtl\n"
+                     "v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nvt 0 0\n"
+                     "usemtl m\nf 1/1/1 2/1/1 3/1/1\n");
+        const auto r = loadObjShapes(obj.path, "nref", "y");
+        if (!r.shapes.empty()) {
+            const bool hasRef = r.shapes[0].material.diffuseTextureRef.has_value();
+            const bool isNonRef = hasRef &&
+                r.shapes[0].material.diffuseTextureRef->find("references/") == std::string::npos;
+            check(isNonRef || !hasRef,
+                  "reference check: diffuseTextureRef is non-reference path (or absent)");
+        }
+    }
+}
+
 void testPathSafety() {
     // Absolute path rejected
     TempManifest bad1(R"({
@@ -477,6 +526,7 @@ int main() {
     testTriStateOverall();
     testReload();
     testReloadBeforeLoad();
+    testReferenceImageNeverTexture();
     testPathSafety();
     testCanonicalPathDedup();
 

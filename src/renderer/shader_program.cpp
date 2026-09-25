@@ -113,6 +113,10 @@ void ShaderProgram::setFloat(const char* name, float v) const {
     glUniform1f(glGetUniformLocation(m_program, name), v);
 }
 
+void ShaderProgram::setInt(const char* name, int v) const {
+    glUniform1i(glGetUniformLocation(m_program, name), v);
+}
+
 void ShaderProgram::release() noexcept {
     if (m_program != 0) {
         glDeleteProgram(m_program);

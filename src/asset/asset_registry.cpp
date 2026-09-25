@@ -1,6 +1,7 @@
 #include "asset_registry.hpp"
 #include "obj_loader.hpp"
 #include "log.hpp"
+#include <texture.hpp>
 
 #include <nlohmann/json.hpp>
 
@@ -125,14 +126,54 @@ ParseResult parseManifest(const std::filesystem::path& manifestPath) {
     return pr;
 }
 
-// Upload one set of canonical shapes to GPU → shared renderer::Model
+// Upload one set of canonical shapes to GPU → shared renderer::Model.
+// Resolves diffuseTextureRef paths relative to objDir and uploads textures;
+// reference_image paths are NEVER passed here (ADR-0002 structural guarantee).
 std::shared_ptr<renderer::Model>
-uploadToGpu(const std::vector<CanonicalShape>& shapes) {
+uploadToGpu(const std::vector<CanonicalShape>& shapes,
+             const std::filesystem::path& objDir,
+             std::unordered_map<std::string,
+                                std::shared_ptr<renderer::Texture>>& texCache,
+             std::vector<LoadDiagnostic>& diags,
+             const std::string& assetId) {
     auto model = std::make_shared<renderer::Model>();
     model->reserve(shapes.size());
     for (const auto& cs : shapes) {
+        renderer::Material mat = cs.material;
+
+        // Wire diffuse texture reference → GL texture (ticket 0009)
+        if (mat.diffuseTextureRef) {
+            std::filesystem::path texPath;
+            try {
+                texPath = std::filesystem::weakly_canonical(
+                    objDir / *mat.diffuseTextureRef);
+            } catch (const std::exception& e) {
+                diags.push_back({assetId,
+                    std::string("texture path error: ") + e.what(),
+                    LoadStatus::LoadedWithWarnings});
+            }
+            if (!texPath.empty()) {
+                const std::string key = texPath.string();
+                if (!texCache.count(key)) {
+                    try {
+                        texCache[key] = std::make_shared<renderer::Texture>(
+                            renderer::Texture::fromFile(texPath));
+                    } catch (const std::exception& e) {
+                        diags.push_back({assetId,
+                            std::string("texture upload failed: ") + e.what(),
+                            LoadStatus::LoadedWithWarnings});
+                    }
+                }
+                if (texCache.count(key)) {
+                    mat.texture = texCache.at(key)->id();
+                    NOTO3D_DEBUG("[asset] wired texture '{}' → id={} for '{}'",
+                                 texPath.filename().string(), mat.texture.value(), assetId);
+                }
+            }
+        }
+
         renderer::Mesh mesh(cs.vertices, cs.indices);
-        model->push_back(renderer::SubMesh{std::move(mesh), cs.material});
+        model->push_back(renderer::SubMesh{std::move(mesh), std::move(mat)});
     }
     return model;
 }
@@ -172,6 +213,7 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
     m_diagnostics.clear();
     m_cpuCache.clear();
     m_modelCache.clear();
+    m_textureCache.clear();
     m_manifestPath = manifestPath;
     m_lastMode     = mode;
 
@@ -290,7 +332,12 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
                 rec.status = cpu->status;
             } else {
                 try {
-                    auto model            = uploadToGpu(cpu->shapes);
+                    auto model = uploadToGpu(
+                        cpu->shapes,
+                        canonPath.parent_path(),
+                        m_textureCache,
+                        m_diagnostics,
+                        entry.id);
                     m_modelCache.emplace(loadKey, model);
                     rec.model  = std::move(model);
                     rec.status = cpu->status;

@@ -3,6 +3,7 @@
 #include "manifest_types.hpp"
 #include "obj_loader.hpp"
 #include <model.hpp>
+#include <texture.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -89,6 +90,9 @@ private:
 
     // Canonical absolute path → shared immutable Model (GPU dedup, Full mode only).
     std::unordered_map<std::string, std::shared_ptr<renderer::Model>> m_modelCache;
+
+    // Texture path → shared GL texture (Full mode only; reference_image never enters here).
+    std::unordered_map<std::string, std::shared_ptr<renderer::Texture>> m_textureCache;
 
     RegistryResult doLoad(const std::filesystem::path& manifestPath, Mode mode);
     RegistryResult buildResult() const;

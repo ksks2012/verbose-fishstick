@@ -1,4 +1,5 @@
 #include "material.hpp"
+#include "texture.hpp"
 #include "log.hpp"
 
 #include <cmath>
@@ -60,6 +61,34 @@ int main() {
         m.opacity     = 0.75f;
         check(near(effectiveAlpha(m), 0.6f),  "effectiveAlpha 0.8 * 0.75 = 0.6");
     }
+
+    // finalAlpha = effectiveAlpha * sampledAlpha  (ticket 0009; effectiveAlpha unchanged)
+    {
+        Material m{};
+        m.baseColor.a = 0.8f;
+        m.opacity     = 0.5f;
+        const float ea = effectiveAlpha(m);              // 0.4
+        const float sa = 0.75f;                          // simulated sampled alpha
+        check(near(ea,        0.4f),  "effectiveAlpha for finalAlpha test == 0.4");
+        check(near(ea * sa,   0.3f),  "finalAlpha 0.4 * 0.75 = 0.3");
+    }
+    {
+        // effectiveAlpha definition is unchanged: baseColor.a * opacity only
+        Material m{};
+        m.baseColor.a = 1.0f;
+        m.opacity     = 1.0f;
+        check(near(effectiveAlpha(m), 1.0f), "effectiveAlpha unchanged by 0009: 1.0 * 1.0 = 1.0");
+    }
+
+    // Texture format contract — dependency-free CPU-side test (ADR-0004 / ticket 0009).
+    // Verifies what the application requests; does not call any GL function.
+    using noto3d::renderer::Texture;
+    check(Texture::kDiffuseInternalFormat == GL_SRGB8_ALPHA8,
+          "diffuse texture uses GL_SRGB8_ALPHA8 internal format (ADR-0004)");
+    check(Texture::kMinFilter == GL_LINEAR_MIPMAP_LINEAR,
+          "diffuse minification filter is GL_LINEAR_MIPMAP_LINEAR");
+    check(Texture::kMagFilter == GL_LINEAR,
+          "diffuse magnification filter is GL_LINEAR");
 
     if (g_failures == 0) { NOTO3D_INFO("ALL PASS"); return EXIT_SUCCESS; }
     NOTO3D_ERROR("{} FAILURE(S)", g_failures);

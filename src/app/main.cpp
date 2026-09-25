@@ -228,9 +228,18 @@ static int run(int frameLimit) {
             // and handle per-material cullEnabled within a proper pass boundary.
             if (!cubeMat.cullEnabled) { glDisable(GL_CULL_FACE); }
             baseShader->use();
-            baseShader->setMat4 ("uMVP",       mvp);
-            baseShader->setVec4 ("uBaseColor", cubeMat.baseColor);
-            baseShader->setFloat("uOpacity",   cubeMat.opacity);
+            baseShader->setMat4 ("uMVP",        mvp);
+            baseShader->setVec4 ("uBaseColor",  cubeMat.baseColor);
+            baseShader->setFloat("uOpacity",    cubeMat.opacity);
+            // Texture: bind to unit 0 if present; set uHasTexture accordingly (0009)
+            if (cubeMat.texture.has_value()) {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, cubeMat.texture.value());
+                baseShader->setInt("uHasTexture", 1);
+                baseShader->setInt("uDiffuse",    0);
+            } else {
+                baseShader->setInt("uHasTexture", 0);
+            }
             glBindVertexArray(cubeMesh->vao());
             glDrawElements(GL_TRIANGLES, cubeMesh->indexCount(), GL_UNSIGNED_INT, nullptr);
             glBindVertexArray(0);
