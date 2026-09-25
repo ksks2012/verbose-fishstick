@@ -1,6 +1,7 @@
 #pragma once
 
 #include "manifest_types.hpp"
+#include "obj_loader.hpp"
 #include <model.hpp>
 
 #include <filesystem>
@@ -11,6 +12,16 @@
 #include <vector>
 
 namespace noto3d::asset {
+
+// Shared CPU parse record for one canonical geometry path (ADR-0007 dedup).
+// Internal registry implementation detail; not part of the public entry contract.
+struct CpuObj {
+    LoadStatus                  status;
+    std::vector<CanonicalShape> shapes;
+    int                         normalWarnings = 0;
+    int                         uvWarnings     = 0;
+    std::string                 errorMessage;
+};
 
 // Read-only runtime view of assets/manifest.json (ADR-0007).
 //
@@ -23,7 +34,8 @@ namespace noto3d::asset {
 // Contracts (ADR-0007):
 //   * model() returns null if geometry is unavailable or failed — never a cube fallback (ADR-0001).
 //   * No exceptions thrown during load; per-asset FAILED is recorded as a diagnostic.
-//   * Deduplication: two entries sharing the same canonical geometry path share one Model.
+//   * Deduplication: two entries sharing the same canonical geometry path share one
+//     CPU parse (uniqueGeometryCount) and, in Full mode, one Model.
 //   * Explicit reload() only; no filesystem watcher.
 class AssetRegistry {
 public:
@@ -54,6 +66,10 @@ public:
     // All diagnostics from the last load / reload.
     std::span<const LoadDiagnostic> diagnostics() const noexcept;
 
+    // Number of distinct canonical geometry paths currently loaded (CPU dedup width).
+    // Headless-observable part of the dedup contract (ADR-0007).
+    [[nodiscard]] std::size_t uniqueGeometryCount() const noexcept;
+
 private:
     enum class Mode { Full, ManifestOnly };
 
@@ -68,7 +84,10 @@ private:
     std::vector<Record>         m_records;   // parallel to m_entries
     std::vector<LoadDiagnostic> m_diagnostics;
 
-    // Canonical absolute path → shared immutable Model (dedup cache).
+    // Canonical absolute path → shared immutable CPU parse record (parse once).
+    std::unordered_map<std::string, std::shared_ptr<const CpuObj>> m_cpuCache;
+
+    // Canonical absolute path → shared immutable Model (GPU dedup, Full mode only).
     std::unordered_map<std::string, std::shared_ptr<renderer::Model>> m_modelCache;
 
     RegistryResult doLoad(const std::filesystem::path& manifestPath, Mode mode);

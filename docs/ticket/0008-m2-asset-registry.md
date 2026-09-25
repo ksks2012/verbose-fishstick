@@ -41,18 +41,23 @@ Contract (ADR-0007):
 
 **Status:** ready-for-agent
 
-- [ ] Registry loads `assets/manifest.json` (nlohmann/json) as a read-only view
-- [ ] Entry schema + invariant enforced; invalid manifest rejected with diagnostic
-- [ ] OBJ + MTL parsed (tinyobjloader) into CPU canonical data → `SubMesh` boundaries; MTL
-      diffuse references recorded on Material (GL texture resolution = 0009)
-- [ ] CPU canonical mesh uploaded through `renderer::Mesh` (0005); no parallel GPU mesh type
-- [ ] Missing normals computed (area-weighted) + counter; missing UVs defaulted `(0,0)` + warning
-- [ ] Axis correction baked once; `recorded_winding` diagnostics-only
-- [ ] Dedup by canonical geometry path → shared immutable Model
-- [ ] Tri-state result; `FAILED` → asset unavailable + diagnostic, no throw in render loop,
-      no implicit cube; explicit `fallback_geometry?` honored (unset now)
-- [ ] Explicit `reload()`; no watcher
-- [ ] Headless tests in `tests/` for all of the above
+- [x] Registry loads `assets/manifest.json` (nlohmann/json) as a read-only view
+- [x] Entry schema + invariant enforced; invalid manifest rejected with diagnostic
+- [x] OBJ + MTL parsed (tinyobjloader) into CPU canonical data → `SubMesh` boundaries; MTL
+      diffuse references recorded on Material (`diffuseTextureRef`); GL resolution = 0009
+- [x] CPU canonical mesh uploaded through `renderer::Mesh` (0005); no parallel GPU mesh type
+- [x] Missing normals computed (area-weighted) + counter; missing UVs defaulted `(0,0)` + warning
+- [x] Axis correction baked once; `recorded_winding` diagnostics-only
+- [x] Dedup by canonical geometry path → shared immutable Model (CPU parse shared once,
+      headless-observable via `uniqueGeometryCount()`)
+- [x] Tri-state result; `FAILED` → asset unavailable + diagnostic, no throw in render loop,
+      no implicit cube; explicit `fallback_geometry?` honored (unset for all MVP assets)
+- [x] Explicit `reload()`; no watcher
+- [x] Headless tests in `tests/` for all of the above
+
+> Note: the `Full`-mode GPU upload path is implemented but not exercised by headless tests;
+> its runtime verification is manual per ADR-0008 (renderer paths are tested at the app level),
+> pending the app wiring `AssetRegistry::load()` in M3.
 
 **Points to ADR:** 0007 (registry/loader contract), 0001 (no implicit cube), 0002 (reference_image
 metadata-only), 0006 (Model/SubMesh/Material)

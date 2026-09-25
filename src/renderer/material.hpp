@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 
 namespace noto3d::renderer {
 
@@ -17,6 +18,10 @@ struct Material {
 
     // GL texture name (sRGB diffuse).  Declared per ADR-0006; wired in ticket 0009.
     std::optional<std::uint32_t> texture;
+
+    // Unresolved MTL diffuse texture reference (relative path from the OBJ directory).
+    // Recorded at load per ADR-0007; ticket 0009 resolves it into Material::texture.
+    std::optional<std::string> diffuseTextureRef;
 };
 
 // effectiveAlpha = baseColor.a * opacity  (DEFINITION.md; never silently extended)

@@ -49,7 +49,9 @@ CanonicalShape buildShapeFromFaces(
         cs.material.shininess = (mat->shininess > 0.0f) ? mat->shininess : 32.0f;
         cs.material.opacity   = mat->dissolve;
         if (!mat->diffuse_texname.empty()) {
-            NOTO3D_DEBUG("[asset] texture ref '{}' deferred to ticket 0009", mat->diffuse_texname);
+            cs.material.diffuseTextureRef = mat->diffuse_texname;
+            NOTO3D_DEBUG("[asset] texture ref '{}' recorded; deferred to ticket 0009",
+                         mat->diffuse_texname);
         }
     }
 

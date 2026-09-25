@@ -227,6 +227,7 @@ f 1/1/1 2/1/1 4/1/1
 )");
     TempFile mtl("noto3d_t_group.mtl", R"(newmtl red
 Kd 1 0 0
+map_Kd face.png
 newmtl blue
 Kd 0 0 1
 )");
@@ -244,6 +245,12 @@ Kd 0 0 1
               "grouping: second material == blue (Kd 0 0 1)");
         check(r.shapes[0].indices.size() == 3 && r.shapes[1].indices.size() == 3,
               "grouping: 3 indices per sub-shape");
+        // MTL diffuse texture reference is recorded (ADR-0007); GL resolution is 0009
+        check(r.shapes[0].material.diffuseTextureRef.has_value() &&
+              *r.shapes[0].material.diffuseTextureRef == "face.png",
+              "grouping: MTL diffuse texture ref recorded on Material");
+        check(!r.shapes[1].material.diffuseTextureRef.has_value(),
+              "grouping: material without map_Kd has no texture ref");
     }
 }
 
@@ -409,6 +416,52 @@ void testPathSafety() {
     }
 }
 
+void testCanonicalPathDedup() {
+    // Two registry entries sharing the same canonical geometry path must both report
+    // consistent status.  In ManifestOnly mode models are null; pointer equality
+    // (model("dup_a") == model("dup_b")) is a Full / GL-level invariant verified at
+    // the application level per ADR-0008 (renderer tests are manual).
+    TempFile shared("noto3d_t_dedup.obj",
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nvt 0 0\nf 1/1/1 2/1/1 3/1/1\n");
+    TempManifest m(R"({
+        "manifest_version": 1,
+        "assets": [
+            { "id": "dup_a", "geometry": "noto3d_t_dedup.obj", "geometry_source": "placeholder" },
+            { "id": "dup_b", "geometry": "noto3d_t_dedup.obj", "geometry_source": "placeholder" }
+        ]
+    })");
+    {
+        AssetRegistry reg;
+        const auto r = reg.loadManifestOnly(m.path);
+        check(r.overall != LoadStatus::Failed,                   "dedup: overall not Failed");
+        check(reg.entries().size() == 2,                         "dedup: both entries present");
+        check(reg.assetStatus("dup_a") == LoadStatus::Success,   "dedup: dup_a == Success");
+        check(reg.assetStatus("dup_b") == LoadStatus::Success,   "dedup: dup_b == Success");
+        check(r.loaded == 2,                                     "dedup: both entries counted");
+        check(reg.uniqueGeometryCount() == 1,
+              "dedup: shared canonical path parsed/cached exactly once (headless)");
+        check(reg.model("dup_a") == nullptr && reg.model("dup_b") == nullptr,
+              "dedup: ManifestOnly models are null");
+    }
+
+    // Real manifest: smile / warm / cool share base_face.obj — all must have the same status.
+    {
+        const std::filesystem::path manifest(NOTO3D_ASSETS_DIR "/manifest.json");
+        AssetRegistry reg2;
+        const auto r2 = reg2.loadManifestOnly(manifest);
+        check(r2.overall != LoadStatus::Failed, "dedup: real manifest loads");
+        const LoadStatus sa = reg2.assetStatus("smile");
+        const LoadStatus sb = reg2.assetStatus("warm");
+        const LoadStatus sc = reg2.assetStatus("cool");
+        check(sa == sb, "dedup: smile and warm share base_face.obj — same status");
+        check(sb == sc, "dedup: warm and cool share base_face.obj — same status");
+        check(sa != LoadStatus::Failed, "dedup: shared base_face.obj entries not Failed");
+        // 6 entries over base_face(3) + accessory(2) + generic(1) = 3 unique paths
+        check(reg2.uniqueGeometryCount() == 3,
+              "dedup: real manifest → exactly 3 unique canonical geometry paths");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -425,6 +478,7 @@ int main() {
     testReload();
     testReloadBeforeLoad();
     testPathSafety();
+    testCanonicalPathDedup();
 
     if (g_failures == 0) { NOTO3D_INFO("ALL PASS"); return EXIT_SUCCESS; }
     NOTO3D_ERROR("{} FAILURE(S)", g_failures);

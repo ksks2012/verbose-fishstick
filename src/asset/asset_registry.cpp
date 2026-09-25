@@ -100,16 +100,23 @@ ParseResult parseManifest(const std::filesystem::path& manifestPath) {
             }
         }
 
-        // Path safety: no absolute paths, no "../" (ADR-0007)
-        if (entry.geometry) {
-            const std::string& gp = *entry.geometry;
-            if (gp.find("../") != std::string::npos ||
-                (!gp.empty() && (gp[0] == '/' || gp[0] == '\\'))) {
-                pr.diagnostics.push_back({entry.id,
-                    "geometry path must be relative with no '../': " + gp,
-                    LoadStatus::Failed});
-                continue;
-            }
+        // Path safety: no absolute paths, no "../" (ADR-0007) — geometry and
+        // fallback_geometry are checked alike.
+        const auto unsafePath = [](const std::string& p) {
+            return p.find("../") != std::string::npos ||
+                   (!p.empty() && (p[0] == '/' || p[0] == '\\'));
+        };
+        if (entry.geometry && unsafePath(*entry.geometry)) {
+            pr.diagnostics.push_back({entry.id,
+                "geometry path must be relative with no '../': " + *entry.geometry,
+                LoadStatus::Failed});
+            continue;
+        }
+        if (entry.fallbackGeometry && unsafePath(*entry.fallbackGeometry)) {
+            pr.diagnostics.push_back({entry.id,
+                "fallback_geometry path must be relative with no '../': " + *entry.fallbackGeometry,
+                LoadStatus::Failed});
+            continue;
         }
 
         pr.entries.push_back(std::move(entry));
@@ -128,6 +135,10 @@ uploadToGpu(const std::vector<CanonicalShape>& shapes) {
         model->push_back(renderer::SubMesh{std::move(mesh), cs.material});
     }
     return model;
+}
+
+CpuObj toCpuObj(const ObjLoadResult& r) {
+    return CpuObj{r.status, r.shapes, r.normalWarnings, r.uvWarnings, r.errorMessage};
 }
 
 }  // namespace
@@ -159,6 +170,7 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
     m_entries.clear();
     m_records.clear();
     m_diagnostics.clear();
+    m_cpuCache.clear();
     m_modelCache.clear();
     m_manifestPath = manifestPath;
     m_lastMode     = mode;
@@ -191,7 +203,22 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
         }
         const std::string canonKey = canonPath.string();
 
-        // Dedup: if already loaded (GPU or CPU), reuse
+        // Fallback candidate path (ADR-0007): explicit opt-in, same safety rules.
+        // Only used if the primary geometry fails to load; no fallback system test
+        // in M2 (all MVP assets leave it unset).
+        std::optional<std::filesystem::path> fallbackPath;
+        if (entry.fallbackGeometry) {
+            try {
+                fallbackPath =
+                    std::filesystem::weakly_canonical(manifestDir / *entry.fallbackGeometry);
+            } catch (const std::exception& e) {
+                m_diagnostics.push_back({entry.id,
+                    std::string("fallback path resolution error: ") + e.what(),
+                    LoadStatus::LoadedWithWarnings});
+            }
+        }
+
+        // GPU dedup fast-path: shared immutable Model already uploaded (Full only)
         if (mode == Mode::Full && m_modelCache.count(canonKey)) {
             rec.model  = m_modelCache.at(canonKey);
             rec.status = LoadStatus::Success;
@@ -199,26 +226,49 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
             continue;
         }
 
-        // Load OBJ to CPU (no GL); up_axis baked into canonical CPU data (ADR-0006/0007)
-        ObjLoadResult obj = loadObjShapes(canonPath, entry.id, entry.upAxis);
+        // CPU load with dedup by canonical path — shared, immutable, parsed once.
+        auto loadCpu = [&](const std::filesystem::path& p) -> std::shared_ptr<const CpuObj> {
+            const std::string key = p.string();
+            const auto hit = m_cpuCache.find(key);
+            if (hit != m_cpuCache.end()) return hit->second;
+            auto cpu = std::make_shared<const CpuObj>(
+                toCpuObj(loadObjShapes(p, entry.id, entry.upAxis)));
+            if (cpu->status != LoadStatus::Failed) m_cpuCache.emplace(key, cpu);
+            return cpu;
+        };
 
-        if (!obj.errorMessage.empty()) {
-            m_diagnostics.push_back({entry.id, obj.errorMessage, obj.status});
+        auto       cpu     = loadCpu(canonPath);
+        std::string loadKey = canonKey;
+        if (cpu->status == LoadStatus::Failed && fallbackPath &&
+            fallbackPath->string() != canonKey) {
+            const auto fb = loadCpu(*fallbackPath);
+            if (fb->status != LoadStatus::Failed) {
+                loadKey = fallbackPath->string();
+                cpu     = fb;
+                m_diagnostics.push_back({entry.id,
+                    "geometry failed; explicit fallback_geometry used",
+                    LoadStatus::LoadedWithWarnings});
+            }
+            // fallback also failed → primary failure stands (diagnosed below)
         }
-        if (obj.normalWarnings > 0) {
+
+        if (!cpu->errorMessage.empty()) {
+            m_diagnostics.push_back({entry.id, cpu->errorMessage, cpu->status});
+        }
+        if (cpu->normalWarnings > 0) {
             m_diagnostics.push_back({entry.id,
-                std::to_string(obj.normalWarnings) +
+                std::to_string(cpu->normalWarnings) +
                     " vertices had missing normals (area-weighted computed)",
                 LoadStatus::LoadedWithWarnings});
         }
-        if (obj.uvWarnings > 0) {
+        if (cpu->uvWarnings > 0) {
             m_diagnostics.push_back({entry.id,
-                std::to_string(obj.uvWarnings) +
+                std::to_string(cpu->uvWarnings) +
                     " vertices had missing UVs (defaulted to (0,0))",
                 LoadStatus::LoadedWithWarnings});
         }
 
-        if (obj.status == LoadStatus::Failed) {
+        if (cpu->status == LoadStatus::Failed) {
             rec.status = LoadStatus::Failed;
             m_records.push_back(std::move(rec));
             continue;
@@ -233,20 +283,28 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
         }
 
         if (mode == Mode::Full) {
-            try {
-                auto model        = uploadToGpu(obj.shapes);
-                m_modelCache[canonKey] = model;
-                rec.model  = std::move(model);
-                rec.status = obj.status;
-                NOTO3D_DEBUG("[asset] loaded '{}' ({} shape(s))", entry.id, obj.shapes.size());
-            } catch (const std::exception& e) {
-                m_diagnostics.push_back({entry.id,
-                    std::string("GPU upload failed: ") + e.what(), LoadStatus::Failed});
-                rec.status = LoadStatus::Failed;
+            // GPU dedup on the effective path (geometry or fallback actually loaded)
+            const auto hit = m_modelCache.find(loadKey);
+            if (hit != m_modelCache.end()) {
+                rec.model  = hit->second;
+                rec.status = cpu->status;
+            } else {
+                try {
+                    auto model            = uploadToGpu(cpu->shapes);
+                    m_modelCache.emplace(loadKey, model);
+                    rec.model  = std::move(model);
+                    rec.status = cpu->status;
+                    NOTO3D_DEBUG("[asset] loaded '{}' ({} shape(s))",
+                                 entry.id, cpu->shapes.size());
+                } catch (const std::exception& e) {
+                    m_diagnostics.push_back({entry.id,
+                        std::string("GPU upload failed: ") + e.what(), LoadStatus::Failed});
+                    rec.status = LoadStatus::Failed;
+                }
             }
         } else {
             // ManifestOnly: record CPU-level status, no model
-            rec.status = obj.status;
+            rec.status = cpu->status;
         }
 
         m_records.push_back(std::move(rec));
@@ -312,6 +370,10 @@ LoadStatus AssetRegistry::assetStatus(std::string_view id) const noexcept {
 
 std::span<const LoadDiagnostic> AssetRegistry::diagnostics() const noexcept {
     return m_diagnostics;
+}
+
+std::size_t AssetRegistry::uniqueGeometryCount() const noexcept {
+    return m_cpuCache.size();
 }
 
 }  // namespace noto3d::asset

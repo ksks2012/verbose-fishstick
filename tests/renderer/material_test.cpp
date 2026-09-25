@@ -31,6 +31,8 @@ int main() {
         check(m.cullEnabled,                 "default cullEnabled == true");
         check(near(m.shininess, 32.0f),      "default shininess == 32.0");
         check(!m.texture.has_value(),        "default texture is empty");
+        check(!m.diffuseTextureRef.has_value(),
+              "default diffuseTextureRef is empty");
     }
 
     // effectiveAlpha = baseColor.a * opacity  (DEFINITION.md)
