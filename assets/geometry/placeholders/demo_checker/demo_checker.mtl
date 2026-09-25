@@ -1,0 +1,5 @@
+# demo_checker.mtl — M2 demo texture fixture (ticket 0014)
+# map_Kd path is OBJ-directory-relative, no ../, no absolute path (ADR-0007)
+newmtl checker
+Kd 1.0 1.0 1.0
+map_Kd textures/demo_checker.png

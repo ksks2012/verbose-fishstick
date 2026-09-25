@@ -23,6 +23,16 @@ std::optional<GeometrySource> parseGeoSource(const std::string& s) {
     return std::nullopt;
 }
 
+// Shared ADR-0007 path-safety predicate (ticket 0013).
+// Returns true when a path is unsafe for asset loading:
+//   * absolute (starts with '/' or '\')
+//   * contains '../' traversal sequence
+// Used for manifest geometry/fallback_geometry fields AND diffuseTextureRef.
+bool isUnsafePath(const std::string& p) {
+    return p.find("../") != std::string::npos ||
+           (!p.empty() && (p[0] == '/' || p[0] == '\\'));
+}
+
 struct ParseResult {
     std::vector<AssetEntry>     entries;
     std::vector<LoadDiagnostic> diagnostics;
@@ -103,17 +113,13 @@ ParseResult parseManifest(const std::filesystem::path& manifestPath) {
 
         // Path safety: no absolute paths, no "../" (ADR-0007) — geometry and
         // fallback_geometry are checked alike.
-        const auto unsafePath = [](const std::string& p) {
-            return p.find("../") != std::string::npos ||
-                   (!p.empty() && (p[0] == '/' || p[0] == '\\'));
-        };
-        if (entry.geometry && unsafePath(*entry.geometry)) {
+        if (entry.geometry && isUnsafePath(*entry.geometry)) {
             pr.diagnostics.push_back({entry.id,
                 "geometry path must be relative with no '../': " + *entry.geometry,
                 LoadStatus::Failed});
             continue;
         }
-        if (entry.fallbackGeometry && unsafePath(*entry.fallbackGeometry)) {
+        if (entry.fallbackGeometry && isUnsafePath(*entry.fallbackGeometry)) {
             pr.diagnostics.push_back({entry.id,
                 "fallback_geometry path must be relative with no '../': " + *entry.fallbackGeometry,
                 LoadStatus::Failed});
@@ -142,7 +148,15 @@ uploadToGpu(const std::vector<CanonicalShape>& shapes,
         renderer::Material mat = cs.material;
 
         // Wire diffuse texture reference → GL texture (ticket 0009)
+        // Apply the same ADR-0007 path-safety predicate used for manifest fields
+        // (ticket 0013): reject absolute paths and '../' traversal before calling
+        // Texture::fromFile().  Rejected refs are cleared on the local Material copy;
+        // the geometry still uploads; the asset renders with baseColor only.
         if (mat.diffuseTextureRef) {
+            if (isUnsafePath(*mat.diffuseTextureRef)) {
+                // Diagnostic was already recorded in doLoad(); clear the local copy.
+                mat.diffuseTextureRef.reset();
+            }
             std::filesystem::path texPath;
             try {
                 texPath = std::filesystem::weakly_canonical(
@@ -324,12 +338,32 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
                 LoadStatus::LoadedWithWarnings});
         }
 
+        // Ticket 0013: validate diffuseTextureRef paths in the CPU data using the
+        // same ADR-0007 predicate applied to manifest geometry paths.  An unsafe
+        // ref (absolute or '../') promotes the asset to LOADED_WITH_WARNINGS;
+        // the geometry is still uploaded, but the texture is skipped.
+        bool hasUnsafeTexRef = false;
+        for (const auto& shape : cpu->shapes) {
+            if (shape.material.diffuseTextureRef &&
+                isUnsafePath(*shape.material.diffuseTextureRef)) {
+                m_diagnostics.push_back({entry.id,
+                    "texture ref '" + *shape.material.diffuseTextureRef +
+                        "' rejected: absolute paths and '../' not allowed (ADR-0007)",
+                    LoadStatus::LoadedWithWarnings});
+                hasUnsafeTexRef = true;
+            }
+        }
+
+        const LoadStatus baseStatus = hasUnsafeTexRef
+            ? LoadStatus::LoadedWithWarnings
+            : cpu->status;
+
         if (mode == Mode::Full) {
             // GPU dedup on the effective path (geometry or fallback actually loaded)
             const auto hit = m_modelCache.find(loadKey);
             if (hit != m_modelCache.end()) {
                 rec.model  = hit->second;
-                rec.status = cpu->status;
+                rec.status = baseStatus;
             } else {
                 try {
                     auto model = uploadToGpu(
@@ -340,7 +374,7 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
                         entry.id);
                     m_modelCache.emplace(loadKey, model);
                     rec.model  = std::move(model);
-                    rec.status = cpu->status;
+                    rec.status = baseStatus;
                     NOTO3D_DEBUG("[asset] loaded '{}' ({} shape(s))",
                                  entry.id, cpu->shapes.size());
                 } catch (const std::exception& e) {
@@ -350,8 +384,8 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
                 }
             }
         } else {
-            // ManifestOnly: record CPU-level status, no model
-            rec.status = cpu->status;
+            // ManifestOnly: record CPU-level status (texture safety already checked above)
+            rec.status = baseStatus;
         }
 
         m_records.push_back(std::move(rec));

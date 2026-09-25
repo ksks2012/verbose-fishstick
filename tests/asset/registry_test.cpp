@@ -511,6 +511,113 @@ void testCanonicalPathDedup() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 0014: demo fixture flows to diffuseTextureRef (CPU boundary)
+// ---------------------------------------------------------------------------
+void testDemoCheckerFixture() {
+    const std::filesystem::path objPath =
+        std::filesystem::path(NOTO3D_ASSETS_DIR)
+        / "geometry/placeholders/demo_checker/demo_checker.obj";
+
+    const auto r = loadObjShapes(objPath, "demo_checker", "y");
+    check(r.status != LoadStatus::Failed,
+          "demo_checker: OBJ+MTL loads (0014 fixture)");
+    check(!r.shapes.empty(),
+          "demo_checker: at least one shape");
+
+    if (!r.shapes.empty()) {
+        check(r.shapes[0].material.diffuseTextureRef.has_value(),
+              "demo_checker: diffuseTextureRef populated from map_Kd");
+        if (r.shapes[0].material.diffuseTextureRef.has_value()) {
+            check(*r.shapes[0].material.diffuseTextureRef == "textures/demo_checker.png",
+                  "demo_checker: diffuseTextureRef == 'textures/demo_checker.png'");
+        }
+    }
+    // Reference images (assets/references/) are untouched — demo_checker uses its own PNG
+    check(r.shapes.empty() || !r.shapes[0].material.diffuseTextureRef.has_value() ||
+          r.shapes[0].material.diffuseTextureRef->find("references/") == std::string::npos,
+          "demo_checker: diffuseTextureRef is NOT a references/ path (ADR-0002)");
+}
+
+// ---------------------------------------------------------------------------
+// 0013: diffuseTextureRef path safety — same predicate as manifest geometry paths
+// ---------------------------------------------------------------------------
+void testTexturePathSafety() {
+    // OBJ with MTL map_Kd using '../' traversal → LOADED_WITH_WARNINGS, diagnostic recorded
+    TempFile esc_mtl("noto3d_t_tex_safety.mtl",
+                     "newmtl m\nKd 1 0 0\nmap_Kd ../escape.png\n");
+    TempFile esc_obj("noto3d_t_tex_safety.obj",
+                     "mtllib noto3d_t_tex_safety.mtl\n"
+                     "v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nvt 0 0\n"
+                     "usemtl m\nf 1/1/1 2/1/1 3/1/1\n");
+    TempManifest esc_m(R"({
+        "manifest_version": 1,
+        "assets": [{
+            "id": "unsafe_tex",
+            "geometry": "noto3d_t_tex_safety.obj",
+            "geometry_source": "placeholder"
+        }]
+    })");
+    {
+        AssetRegistry reg;
+        const auto r = reg.loadManifestOnly(esc_m.path);
+        check(reg.assetStatus("unsafe_tex") == LoadStatus::LoadedWithWarnings,
+              "tex-safety: '../' texture ref → LOADED_WITH_WARNINGS");
+        check(!r.diagnostics.empty(),
+              "tex-safety: diagnostic recorded for unsafe texture ref");
+        // Asset is still valid (geometry loads fine); only the texture is rejected
+        check(reg.findEntry("unsafe_tex") != nullptr,
+              "tex-safety: entry still present (geometry unaffected)");
+    }
+
+    // OBJ with MTL map_Kd using absolute path → LOADED_WITH_WARNINGS
+    TempFile abs_mtl("noto3d_t_tex_abs.mtl",
+                     "newmtl m\nKd 0 1 0\nmap_Kd /etc/passwd\n");
+    TempFile abs_obj("noto3d_t_tex_abs.obj",
+                     "mtllib noto3d_t_tex_abs.mtl\n"
+                     "v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nvt 0 0\n"
+                     "usemtl m\nf 1/1/1 2/1/1 3/1/1\n");
+    TempManifest abs_m(R"({
+        "manifest_version": 1,
+        "assets": [{
+            "id": "abs_tex",
+            "geometry": "noto3d_t_tex_abs.obj",
+            "geometry_source": "placeholder"
+        }]
+    })");
+    {
+        AssetRegistry reg;
+        const auto r = reg.loadManifestOnly(abs_m.path);
+        check(reg.assetStatus("abs_tex") == LoadStatus::LoadedWithWarnings,
+              "tex-safety: absolute texture path → LOADED_WITH_WARNINGS");
+        check(!r.diagnostics.empty(),
+              "tex-safety: diagnostic for absolute texture path");
+    }
+
+    // Safe relative path is untouched
+    TempFile safe_mtl("noto3d_t_tex_safe.mtl",
+                      "newmtl m\nKd 0 0 1\nmap_Kd textures/ok.png\n");
+    TempFile safe_obj("noto3d_t_tex_safe.obj",
+                      "mtllib noto3d_t_tex_safe.mtl\n"
+                      "v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nvt 0 0\n"
+                      "usemtl m\nf 1/1/1 2/1/1 3/1/1\n");
+    TempManifest safe_m(R"({
+        "manifest_version": 1,
+        "assets": [{
+            "id": "safe_tex",
+            "geometry": "noto3d_t_tex_safe.obj",
+            "geometry_source": "placeholder"
+        }]
+    })");
+    {
+        AssetRegistry reg;
+        reg.loadManifestOnly(safe_m.path);
+        // Safe path passes the predicate; status is Success (geometry has all normals/UVs)
+        check(reg.assetStatus("safe_tex") != LoadStatus::Failed,
+              "tex-safety: safe relative texture path → not Failed");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -529,6 +636,8 @@ int main() {
     testReferenceImageNeverTexture();
     testPathSafety();
     testCanonicalPathDedup();
+    testDemoCheckerFixture();
+    testTexturePathSafety();
 
     if (g_failures == 0) { NOTO3D_INFO("ALL PASS"); return EXIT_SUCCESS; }
     NOTO3D_ERROR("{} FAILURE(S)", g_failures);

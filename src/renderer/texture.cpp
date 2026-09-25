@@ -9,6 +9,11 @@
 
 namespace noto3d::renderer {
 
+// Compile-time pin of the diffuse upload format (ticket 0009) — same style as the
+// Vertex stride invariant at mesh.hpp. Verifies what the app requests, not driver storage.
+static_assert(Texture::kDiffuseInternalFormat == GL_SRGB8_ALPHA8,
+              "diffuse textures must upload as GL_SRGB8_ALPHA8 (ADR-0004)");
+
 Texture Texture::fromFile(const std::filesystem::path& path) {
     stbi_set_flip_vertically_on_load(1);  // OpenGL bottom-left origin
 
