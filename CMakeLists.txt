@@ -55,7 +55,7 @@ set(LIB_DIR ${CMAKE_SOURCE_DIR}/lib)
 set(NLOHMANN_JSON_DIR ${LIB_DIR}/nlohmann_json)
 FetchContent_Declare(nlohmann_json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG        v3.11.3
+    GIT_TAG        9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03  # v3.11.3
     GIT_SHALLOW    TRUE
     SOURCE_DIR     ${NLOHMANN_JSON_DIR})
 
@@ -65,7 +65,7 @@ set(GLM_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 set(GLM_DIR ${LIB_DIR}/glm)
 FetchContent_Declare(glm
     GIT_REPOSITORY https://github.com/g-truc/glm.git
-    GIT_TAG        1.0.1
+    GIT_TAG        0af55ccecd98d4e5a8d1fad7de25ba429d60e863  # 1.0.1
     GIT_SHALLOW    TRUE
     SOURCE_DIR     ${GLM_DIR})
 
@@ -73,7 +73,7 @@ FetchContent_Declare(glm
 set(IMGUI_DIR ${LIB_DIR}/imgui)
 FetchContent_Declare(imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG        v1.92.9-docking
+    GIT_TAG        9b4eb24cee2071e61dc1f9ef3e5228097cdde720  # v1.92.9-docking
     GIT_SHALLOW    TRUE
     SOURCE_DIR     ${IMGUI_DIR})
 
@@ -81,7 +81,7 @@ FetchContent_Declare(imgui
 set(TINYOBJ_DIR ${LIB_DIR}/tinyobjloader)
 FetchContent_Declare(tinyobjloader
     GIT_REPOSITORY https://github.com/tinyobjloader/tinyobjloader.git
-    GIT_TAG        v1.0.6
+    GIT_TAG        e60d33385e2e4f7fa891513150f2532b5bbcb093  # v1.0.6
     GIT_SHALLOW    TRUE
     SOURCE_DIR     ${TINYOBJ_DIR})
 
@@ -91,7 +91,7 @@ set(SPDLOG_BUILD_TESTS   OFF CACHE BOOL "" FORCE)
 set(SPDLOG_DIR ${LIB_DIR}/spdlog)
 FetchContent_Declare(spdlog
     GIT_REPOSITORY https://github.com/gabime/spdlog.git
-    GIT_TAG        v1.14.1
+    GIT_TAG        27cb4c76708608465c413f6d0e6b8d99a4d84302  # v1.14.1
     GIT_SHALLOW    TRUE
     SOURCE_DIR     ${SPDLOG_DIR})
 
@@ -107,7 +107,7 @@ set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
 set(GLFW_DIR ${LIB_DIR}/glfw)
 FetchContent_Declare(glfw
     GIT_REPOSITORY https://github.com/glfw/glfw.git
-    GIT_TAG        3.4
+    GIT_TAG        7b6aead9fb88b3623e3b3725ebb42670cbe4c579  # 3.4
     GIT_SHALLOW    TRUE
     SOURCE_DIR     ${GLFW_DIR})
 
