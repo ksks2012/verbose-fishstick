@@ -211,6 +211,7 @@ add_test(NAME asset-registry-contract COMMAND noto3d-registry-tests)
 # ---------------------------------------------------------------------------
 add_library(noto3d_renderer STATIC
     src/renderer/mesh.cpp
+    src/renderer/renderer.cpp
     src/renderer/shader_program.cpp
     src/renderer/texture.cpp)
 target_include_directories(noto3d_renderer PUBLIC

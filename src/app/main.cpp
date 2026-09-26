@@ -6,9 +6,7 @@
 
 #include <gl_capability.hpp>
 #include <log.hpp>
-#include <material.hpp>
-#include <mesh.hpp>
-#include <shader_program.hpp>
+#include <renderer.hpp>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -32,7 +30,6 @@ namespace {
 const char* kWindowTitle  = "noto3d-editor (M1)";
 const int   kInitialW     = 1280;
 const int   kInitialH     = 720;
-const float kClearLinear[4] = {0.12f, 0.12f, 0.14f, 1.0f};  // linear-space clear (ADR-0005)
 
 // Cube test asset — vertices verbatim from assets/test/cube.obj (ADR-0001).
 // 8 interleaved Vertex entries: position/normal/uv.
@@ -155,18 +152,9 @@ static int run(int frameLimit) {
         return EXIT_FAILURE;
     }
 
-    // ---- Renderer state baseline (ADR-0005) -------------------------------
-    glEnable(GL_MULTISAMPLE);
-    glEnable(GL_FRAMEBUFFER_SRGB);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glClearColor(kClearLinear[0], kClearLinear[1], kClearLinear[2], kClearLinear[3]);
+    NOTO3D_INFO("M0_OK context 3.3+ core profile; renderer baseline configured");
 
+    // Debug GL context setup — one-time, not a per-pass concern (ADR-0004)
 #if NOTO3D_DEBUG_GL
     if (GLAD_GL_KHR_debug && glDebugMessageCallback != nullptr) {
         glEnable(GL_DEBUG_OUTPUT);
@@ -177,7 +165,7 @@ static int run(int frameLimit) {
     }
 #endif
 
-    NOTO3D_INFO("M0_OK context 3.3+ core profile; renderer baseline configured");
+    noto3d::renderer::Renderer renderer;
 
     // ---- M1 — base shader + cube test asset (ADR-0001/0006) ---------------
     // Both steps in one try block: shader throws on GLSL error; mesh upload is
@@ -209,42 +197,22 @@ static int run(int frameLimit) {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             glfwSetWindowShouldClose(window, GLFW_TRUE);
         }
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // ---- Draw cube (ADR-0001 explicit test asset) ----------------------
-        {
-            int fbW = 0, fbH = 0;
-            glfwGetFramebufferSize(window, &fbW, &fbH);
-            const float aspect = (fbH > 0)
-                ? static_cast<float>(fbW) / static_cast<float>(fbH) : 1.0f;
-            const auto proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
-            const auto view = glm::lookAt(glm::vec3(0.0f, 0.5f, 3.0f),
-                                          glm::vec3(0.0f, 0.0f, 0.0f),
-                                          glm::vec3(0.0f, 1.0f, 0.0f));
-            const auto mvp  = proj * view;  // model = identity
+        // Compute MVP for this frame
+        int fbW = 0, fbH = 0;
+        glfwGetFramebufferSize(window, &fbW, &fbH);
+        const float aspect = (fbH > 0)
+            ? static_cast<float>(fbW) / static_cast<float>(fbH) : 1.0f;
+        const auto proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
+        const auto view = glm::lookAt(glm::vec3(0.0f, 0.5f, 3.0f),
+                                      glm::vec3(0.0f, 0.0f, 0.0f),
+                                      glm::vec3(0.0f, 1.0f, 0.0f));
+        const auto mvp = proj * view;  // model = identity
 
-            // TODO(0007): cull-state toggle is a temporary per-draw workaround.
-            // 0007 Begin3DPass/End3DPass will own canonical state for the whole pass
-            // and handle per-material cullEnabled within a proper pass boundary.
-            if (!cubeMat.cullEnabled) { glDisable(GL_CULL_FACE); }
-            baseShader->use();
-            baseShader->setMat4 ("uMVP",        mvp);
-            baseShader->setVec4 ("uBaseColor",  cubeMat.baseColor);
-            baseShader->setFloat("uOpacity",    cubeMat.opacity);
-            // Texture: bind to unit 0 if present; set uHasTexture accordingly (0009)
-            if (cubeMat.texture.has_value()) {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, cubeMat.texture.value());
-                baseShader->setInt("uHasTexture", 1);
-                baseShader->setInt("uDiffuse",    0);
-            } else {
-                baseShader->setInt("uHasTexture", 0);
-            }
-            glBindVertexArray(cubeMesh->vao());
-            glDrawElements(GL_TRIANGLES, cubeMesh->indexCount(), GL_UNSIGNED_INT, nullptr);
-            glBindVertexArray(0);
-            if (!cubeMat.cullEnabled) { glEnable(GL_CULL_FACE); }
-        }
+        renderer.Begin3DPass();
+        renderer.submit(*cubeMesh, cubeMat, *baseShader, mvp);
+        renderer.End3DPass();
+
         glfwSwapBuffers(window);
         ++frames;
     }
