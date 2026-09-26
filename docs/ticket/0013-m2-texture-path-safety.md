@@ -27,13 +27,16 @@ Contract:
 
 **Blocked by:** 0009
 
-**Status:** ready-for-agent
+**Status:** completed (implemented + headless-verified; staged for commit)
 
-- [ ] `diffuseTextureRef` validated via the shared manifest path-safety predicate before the
-      `Texture::fromFile()` call
-- [ ] Rejected texture ref → overall asset load promoted to `LOADED_WITH_WARNINGS`;
+- [x] `diffuseTextureRef` validated via the shared manifest path-safety predicate before the
+      `Texture::fromFile()` call (same `isUnsafePath()` guard at CPU `doLoad` and GPU `uploadToGpu`)
+- [x] Rejected texture ref → overall asset load promoted to `LOADED_WITH_WARNINGS`;
       `material.diffuseTextureRef` left unset; asset still renders with `baseColor`
-- [ ] Same predicate as the manifest geometry-path check (no duplicated logic)
-- [ ] Headless test: OBJ with MTL `map_Kd ../escape.png` → `LOADED_WITH_WARNINGS`, texture ref unset
+      (diagnostic recorded)
+- [x] Same predicate as the manifest geometry-path check (no duplicated logic — shared
+      `isUnsafePath()` in `asset_registry.cpp`)
+- [x] Headless test: OBJ with MTL `map_Kd ../escape.png` → `LOADED_WITH_WARNINGS`, texture ref unset
+      (`testTexturePathSafety`: `../` and absolute-path cases, plus safe-relative control case)
 
 **Points to ADR:** 0007 (path safety: no absolute paths, no `../`, no runtime network)

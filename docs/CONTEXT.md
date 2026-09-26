@@ -13,7 +13,9 @@ C++/OpenGL editor MVP for Noto 3D-style emoji composition ("emoji_editor").
 
 ## Current milestone
 M2 Asset Pipeline in progress. M0 (Environment/build) + M0.5 (Asset contract spike) and M1
-Minimal Renderer are complete. Current M2 execution chain: 0008 → 0014 → 0009 → 0013.
+Minimal Renderer are complete, M2 chain 0008 → 0014 → 0009 → 0013 fully implemented (0014 and
+0013 completed; 0009 core committed, pending manual E2E demo render once the editor consumes the
+registry). Next executable: 0012 app/renderer separation / registry integration.
 M0 scope, user stories and acceptance matrix: `docs/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
 
@@ -78,14 +80,17 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   renderer work (⑩); blocked by 0012
 - 0012 M1 app/renderer separation (supersedes 0007): `renderer::Renderer` + slim main.cpp;
   blocked by 0009
-- 0008–0014–0009 M2 asset pipeline (linear chain): 0008 AssetRegistry + OBJ/MTL→Mesh → 0014 demo
-  fixture subtree (`assets/geometry/placeholders/demo_checker/` with `textures/demo_checker.png`;
-  manifest v1 unchanged; `map_Kd` relative, no `../`; ready-for-agent) → 0009 sRGB diffuse texture
+- 0008–0014–0009 M2 asset pipeline (linear chain, implemented): 0008 AssetRegistry + OBJ/MTL→Mesh →
+  0014 demo fixture subtree (`assets/geometry/placeholders/demo_checker/` with
+  `textures/demo_checker.png`, deterministic generator `assets/tools/generate_demo_texture.py`,
+  manifest v1 unchanged, `map_Kd` relative no `../`; **completed**) → 0009 sRGB diffuse texture
   pipeline consuming the fixture (GL_SRGB8_ALPHA8; finalAlpha = effectiveAlpha * sampledAlpha;
-  uHasTexture branch; core committed `6225dac`, E2E verification blocked by 0014). Fixture
-  ownership: 0014 builds, 0009 consumes.
-- 0013 M2 texture path safety (hardens the ADR-0007 path contract after 0009 via the shared
-  predicate; rejected diffuseTextureRef → LOADED_WITH_WARNINGS); not a prerequisite of 0014
+  uHasTexture branch; core committed `6225dac` + staged static_assert/shader refinement;
+  **in-progress — manual E2E demo render pending editor→registry wiring**). Fixture ownership:
+  0014 builds, 0009 consumes.
+- 0013 M2 texture path safety (**completed**): shared `isUnsafePath()` predicate enforced for
+  manifest geometry / fallback_geometry / diffuseTextureRef; rejected diffuseTextureRef →
+  LOADED_WITH_WARNINGS; not a prerequisite of 0014
 - 0010 dependency pinning hardening (ADR-0003 watch item; blocked by M0, parallel track)
 
 ## Known MVP limitations

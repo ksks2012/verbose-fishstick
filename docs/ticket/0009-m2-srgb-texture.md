@@ -67,27 +67,29 @@ Contract:
 
 **Status:** in-progress
 
-- [ ] Regression check: `static_assert(sizeof(Vertex) == 32)` remains present at
+- [x] Regression check: `static_assert(sizeof(Vertex) == 32)` remains present at
       `src/renderer/mesh.hpp` (ADR-0006 Vertex-stride invariant; 0009 does not modify Mesh)
-- [ ] Diffuse allocation requests `GL_SRGB8_ALPHA8`, pinned by
+- [x] Diffuse allocation requests `GL_SRGB8_ALPHA8`, pinned by
       `static_assert(Texture::kDiffuseInternalFormat == GL_SRGB8_ALPHA8)` — a compile-time API
       contract on the application-side requested internal format (verifies what the app requests,
       not the driver's actual storage)
-- [ ] stb_image loads the diffuse PNG; min/mag/mipmap policy explicitly selected and applied
+- [x] stb_image loads the diffuse PNG; min/mag/mipmap policy explicitly selected and applied
       consistently (chosen independently of MSAA)
-- [ ] MVP `uHasTexture` branch semantics locked: no texture → `sampledAlpha = 1.0` and
+- [x] MVP `uHasTexture` branch semantics locked: no texture → `sampledAlpha = 1.0` and
       `texColor = vec4(1.0)`; `finalColor.rgb = baseColor.rgb * texColor.rgb`;
-      `finalAlpha = effectiveAlpha * sampledAlpha`; `effectiveAlpha` unchanged
-- [ ] Fragment shader samples diffuse; OpenGL sRGB sampling converts to linear (shader does not
+      `finalAlpha = effectiveAlpha * sampledAlpha`; `effectiveAlpha` unchanged (shader: `uniform
+      bool uHasTexture`; `uDiffuse` — no sample when false)
+- [x] Fragment shader samples diffuse; OpenGL sRGB sampling converts to linear (shader does not
       decode); shader outputs linear RGB + `finalAlpha`
 - [ ] Consumes the 0014 fixture: `Material.diffuseTextureRef` → `Texture::fromFile` (`GL_SRGB8_ALPHA8`)
-      → demo render; Reference PNGs (`assets/references/**`) never bound — E2E demo verification
-      (manual per ADR-0008)
+      → demo render; Reference PNGs (`assets/references/**`) never bound — **E2E demo verification
+      (manual per ADR-0008): pending — the editor does not yet consume the AssetRegistry (app
+      wiring is 0012 territory)**
 
-> Implementation progress (committed `6225dac`): `renderer::Texture::fromFile` (stb_image +
-> GL_SRGB8_ALPHA8 + mipmap/filter policy), shader sampling + `finalAlpha`, and registry
-> `diffuseTextureRef → Texture` wiring exist. Remaining: wording/acceptance locking above and
-> end-to-end demo verification gated on 0014.
+> Implementation progress: committed `6225dac` (`renderer::Texture::fromFile` + GL_SRGB8_ALPHA8 +
+> mipmap/filter policy, shader sampling + `finalAlpha`, registry `diffuseTextureRef → Texture`
+> wiring); staged: `static_assert(kDiffuseInternalFormat == GL_SRGB8_ALPHA8)`, shader
+> bool/branch refinement. Remaining: manual E2E demo render once the editor consumes the registry.
 
 **Points to ADR:** 0004 (sRGB baseline, texture format & color pipeline), 0006 (texture? material
 slot, effectiveAlpha), 0002/0007 (reference_image metadata-only)
