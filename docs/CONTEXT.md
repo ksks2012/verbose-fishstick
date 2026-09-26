@@ -12,26 +12,27 @@ Document hierarchy:
 C++/OpenGL editor MVP for Noto 3D-style emoji composition ("emoji_editor").
 
 ## Current milestone
-M2 Asset Pipeline **complete**. M0 (Environment/build), M0.5 (Asset contract spike), M1 (minimal
-renderer + pass hygiene) and M2 (0008 → 0014 → 0009 → 0013 + 0012/0011/0010) are all done and
-verified. Completed tickets are archived at `docs/archive/ticket/`. Working tree state:
+M3 Noto Vertical Slice **complete**. M0 (Environment/build), M0.5 (Asset contract spike),
+M1 (minimal renderer + pass hygiene), M2 (0008 → 0014 → 0009 → 0013 + 0012/0011/0010) and
+M3 (0015 → 0016 → 0017 → 0018) are all done and verified. Completed tickets are archived at
+`docs/archive/ticket/` (all 18; `docs/ticket/` empty). Working tree state:
 
 - `noto3d-editor` consumes the AssetRegistry: `--asset=<id>` (default first renderable manifest
   asset) and `--demo` (0014 fixture) render through the registry; 0009's E2E gate is closed
   (`M2_OK ... with diffuse texture (0009 E2E)`, dev + release).
+- M3 observability: every selection prints `M3_INFO selected asset '<id>' geometry=<source>
+  reference=<path>`; window title is `<id> [placeholder] | noto3d (M3)`; `--list-assets` is a
+  pre-GL diagnostic CLI. M3 fixture frozen by `manifest_integrity_test` (ctest 5/5) and
+  human-verified per category (0018).
 - 0011 folded items done: ⑦ `#error` shader-dir, ⑧ no inline cube / no `optional` ceremony,
   ⑨ validated `--frames=` (non-numeric/negative exits non-zero), ⑩ uniform-location cache.
 - 0010 done: all six Git deps pinned by immutable SHA (each resolves to its release tag);
   no archive sources → `URL_HASH` n/a; dev + release configure/build + `ctest` green.
 
-No remaining active M2 tickets. Next on the roadmap: **M3 vertical slice → M4 scene → M5 ImGui**
-(ADR-0005 ImGui-limitation note at the Renderer's `End3DPass()`; `lib/imgui` already fetched).
-M3 in progress: 0015 (baseline gate), 0016 (manifest-integrity fixture freeze, ctest now 5/5) and
-0017 (selection diagnostics: `M3_INFO` identity line on every selection, dynamic window title
-`<id> [placeholder] | noto3d (M3)`, `--list-assets` pre-GL diagnostic CLI) are complete; 0018
-(human Noto-category verification) is open. The M3 milestone spec is **embedded in ADR-0009**
+Next on the roadmap: **M4 scene → M5 ImGui** (ADR-0005 ImGui-limitation note at the Renderer's
+`End3DPass()`; `lib/imgui` already fetched). The M3 milestone spec is **embedded in ADR-0009**
 (§ Spec — per DOCUMENTATION-LIFECYCLE, specs live at the ADR layer); `docs/ticket/` holds
-execution tickets only, rolled under accepted ADRs.
+execution tickets only, rolled under accepted ADRs; M4 tickets will be derived from its ADR.
 M0 scope, user stories and acceptance matrix: `docs/archive/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
 Project overview / build / test quickstart: repo-root `README.md`.
@@ -104,7 +105,7 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
       for curated IDs, verify winding/axis against M0.5 contract, re-pin sources.
 - [x] Replace GIT_TAG pins with commit SHA (+ URL_HASH) once dev build is stable
       (authored as ticket 0010 — **completed**; all six deps on immutable SHA).
-- [ ] M3 vertical slice → M4 scene → M5 ImGui editor (next roadmap milestones).
+- [x] M3 vertical slice (ADR-0009; 0015–0018). Next: M4 scene → M5 ImGui editor.
 
 ## Execution tickets (active ones live in docs/ticket/; completed archived at docs/archive/ticket/)
 - M0: 0001 (spec) + 0002–0004 (execution) — complete
@@ -116,10 +117,11 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
 - 0012 (M1 app/renderer separation + registry integration) — complete; closes 0009's E2E gate
 - 0010 (dependency pinning) — complete; infra track
 
-### M3 (spec in ADR-0009; open execution ticket 0018 in docs/ticket/)
+### M3 (spec embedded in ADR-0009; all execution tickets archived)
 - 0015 (M3 baseline gate), 0016 (asset-set freeze: manifest_integrity_test.cpp), 0017 (selection
   diagnostics + window-title identity + `--list-assets`) — complete, archived
-- 0018 (human Noto-category verification) — open, awaiting manual matrix
+- 0018 (human Noto-category verification) — complete: 6/6 PASS manual matrix (3 shared placeholder
+  silhouettes observed), archived. `docs/ticket/` is empty again.
 
 ## Known MVP limitations
 - No transparent-object depth sorting.

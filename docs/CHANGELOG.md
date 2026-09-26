@@ -1,8 +1,8 @@
 # CHANGELOG
 
-## [Unreleased] — M3 Noto vertical slice (in progress)
+## [Unreleased] — M3 Noto vertical slice (complete)
 
-### M3 — asset observability (0015 + 0016 + 0017; 0018 open)
+### M3 — asset observability (0015–0018; complete)
 - 0015 baseline gate: stale-wording scan across docs (no M2-chain residue); fresh configure +
   build + `ctest` green on dev/dev-clean/release as the M3 baseline. Smoke markers left untouched
   (0017 owns runtime identity).
@@ -19,6 +19,10 @@
   `glfwSetWindowTitle`; `--list-assets` diagnostic CLI prints `M3_ASSETS` header + one line per
   asset via `loadManifestOnly`/`entries()` and exits 0 before any GL context. No renderer/GL/text
   capability added; frame-limit/asset/demo exit codes unchanged.
+- 0018 human category verification: 6-row manual matrix filled by human review — all assets PASS
+  (3 shared placeholder silhouettes observed, consistent with the 0016 shared-geometry invariant);
+  one informational note on `cool` (reference u1f60e is a smiling face *with sunglasses*; not
+  conveyed by base_face — deferred to official-mesh swap). **M3 execution closed**.
 - Docs: ADR-0009 records the locked M3 decisions (fence→freeze→observe→verify; fixture contract
   verified independently of `AssetRegistry`; pre-GL `--list-assets`; 0018 exclusions) and embeds
   the M3 milestone spec (§ Spec) — per DOCUMENTATION-LIFECYCLE, **specs live at the ADR layer and

@@ -150,5 +150,9 @@ Noto category (one-shot manual matrix, PASS/notes) — explicitly not a similari
   `metadata.geometry_sha256`.
 - `--list-assets` runs pre-GL and is headless-safe; it is the natural tool for 0018's reviewer to
   confirm the frozen set before rendering each asset.
-- Execution status: 0015/0016/0017 complete and archived (all acceptance checks ✓); 0018 open —
-  its matrix fill is the human-facing remaining work.
+- Execution status: **M3 CLOSED.** 0015/0016/0017/0018 all complete and archived (acceptance ✓).
+  0018's human matrix filled 2026-09-26: 6/6 PASS — rendered each `--asset=<id>` against its
+  official reference PNG; observed the 3 shared placeholder silhouettes (base_face ×3,
+  accessory ×2, generic ×1), consistent with the 0016 shared-geometry invariant. One informational
+  note: `cool` (u1f60e) is a smiling face with sunglasses, which the base_face placeholder cannot
+  convey — not a failure, deferred to the official-mesh watch item.

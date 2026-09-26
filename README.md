@@ -19,7 +19,8 @@ picks, plus a textured demo fixture) — not yet an interactive editor (M4/M5).
 | **M0.5** | Asset contract spike (manifest + placeholders + references) | ✅ complete |
 | **M1** | Minimal renderer (0005–0007) | ✅ complete — Mesh upload, Material/shader/first draw, pass hygiene |
 | **M2** | Asset pipeline (0008–0014) | ✅ complete — `AssetRegistry` + OBJ/MTL→Mesh, sRGB diffuse texture pipeline + E2E demo render, demo fixture, texture path safety |
-| M3/M4+ | Noto vertical slice / Scene / ImGui editor | ⏳ not started |
+| **M3** | Noto vertical slice (0015–0018) | ✅ complete — fixture frozen (manifest-integrity contract test, ctest 5/5), selection diagnostics (`M3_INFO` identity line, dynamic title, `--list-assets`), human category verification |
+| M4/M5+ | Scene / ImGui editor | ⏳ not started |
 
 ### Completed tickets (`docs/archive/ticket/`)
 
@@ -35,7 +36,7 @@ picks, plus a textured demo fixture) — not yet an interactive editor (M4/M5).
 - **0011** M1 code-quality deferred findings (⑦⑧⑨⑩) — folded into 0012
 
 No active tickets. `docs/ticket/` is empty; all execution history lives under
-`docs/archive/ticket/`. Next roadmap milestone: **M3 Noto vertical slice**.
+`docs/archive/ticket/`. Next roadmap milestone: **M4 Scene**.
 
 ## Build & test
 
@@ -85,7 +86,8 @@ texture ref promotes the asset to `LOADED_WITH_WARNINGS` (geometry still renders
 
 ## Next steps
 
-1. **M3 Noto vertical slice** — render a real Noto-emoji placeholder set from the manifest and
-   compare against reference PNGs; official OBJ release swaps `geometry_source` (watch item).
+1. **M3 complete** — Noto vertical slice closed: 6-asset fixture machine-frozen (0016 contract
+   test), runtime-observable (0017), human-verified (0018). 官方 OBJ release swaps
+   `geometry_source` (watch item).
 2. **M4 Scene** (multi-asset composition, transforms) and **M5 ImGui editor** (overlay owns its
    GL state; ADR-0005 handoff point = `Renderer::End3DPass()`; `lib/imgui` already fetched).
