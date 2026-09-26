@@ -263,6 +263,24 @@ noto3d_apply_sanitizers(noto3d-scene-tests)
 add_test(NAME scene-entity-contract COMMAND noto3d-scene-tests)
 
 # ---------------------------------------------------------------------------
+# Application library (ADR-0008/0010): app-layer orchestration, no GL state
+# ---------------------------------------------------------------------------
+add_library(noto3d_app STATIC
+    src/app/draw_list.cpp)
+target_include_directories(noto3d_app PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/app)
+target_link_libraries(noto3d_app
+    PUBLIC  noto3d_scene noto3d_renderer)
+noto3d_set_warnings(noto3d_app)
+noto3d_apply_sanitizers(noto3d_app)
+
+add_executable(noto3d-app-tests tests/app/draw_list_test.cpp)
+target_link_libraries(noto3d-app-tests PRIVATE noto3d_app noto3d_core)
+noto3d_set_warnings(noto3d-app-tests)
+noto3d_apply_sanitizers(noto3d-app-tests)
+add_test(NAME app-draw-list-seam COMMAND noto3d-app-tests)
+
+# ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
 add_executable(noto3d-editor src/app/main.cpp)
