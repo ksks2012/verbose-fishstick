@@ -51,4 +51,4 @@ the current binary, fix it; if it will only change after 0017, leave it and reco
 > M2_OK on `--demo`); window title / runtime identity wiring left to 0017 — no pre-emptive edit
 > per the smoke-marker rule.
 **Points to ADR:** 0008 (docs lifecycle), M2 completion in CHANGELOG
-**Rolls under spec:** 0019 (M3 milestone spec)
+**Rolls under spec:** ADR-0009 (M3 spec embedded; execution tickets only in docs/ticket/)

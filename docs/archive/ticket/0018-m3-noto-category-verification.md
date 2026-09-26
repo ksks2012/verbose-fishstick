@@ -47,6 +47,6 @@ the result is a milestone record, not a repeatable automated check.
 
 **Blocked by:** 0017
 **Status:** open
-**Rolls under spec:** 0019 (M3 milestone spec)
+**Rolls under spec:** ADR-0009 (M3 spec embedded; execution tickets only in docs/ticket/)
 **Points to ADR:** 0001/0002 (placeholder = geometry driver, reference = ground truth, category
 verification ≠ similarity), 0009 (M3 decisions)

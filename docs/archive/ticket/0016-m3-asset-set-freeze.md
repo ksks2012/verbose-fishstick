@@ -59,4 +59,4 @@ implementation details.
 > (FIPS 180-4) — self-contained, no third-party dependency.
 **Points to ADR:** 0007 (manifest v1 single source of truth, invariant), 0002 (reference_image
 metadata-only), 0008 (dependency-free headless tests)
-**Rolls under spec:** 0019 (M3 milestone spec)
+**Rolls under spec:** ADR-0009 (M3 spec embedded; execution tickets only in docs/ticket/)

@@ -20,9 +20,11 @@
   asset via `loadManifestOnly`/`entries()` and exits 0 before any GL context. No renderer/GL/text
   capability added; frame-limit/asset/demo exit codes unchanged.
 - Docs: ADR-0009 records the locked M3 decisions (fence→freeze→observe→verify; fixture contract
-  verified independently of `AssetRegistry`; pre-GL `--list-assets`; 0018 exclusions);
-  `docs/ticket/0019` is the M3 milestone spec (0001-style) that execution tickets 0015–0018 roll
-  under; CONTEXT updated in the same change.
+  verified independently of `AssetRegistry`; pre-GL `--list-assets`; 0018 exclusions) and embeds
+  the M3 milestone spec (§ Spec) — per DOCUMENTATION-LIFECYCLE, **specs live at the ADR layer and
+  `docs/ticket/` holds execution tickets only** (0015–0018 roll under ADR-0009); the previous
+  standalone spec file (0019) was removed as superseded, its content merged into ADR-0009; CONTEXT
+  updated in the same change.
 
 ## [Unreleased] — M1 + M2 (complete)
 

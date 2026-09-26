@@ -29,7 +29,9 @@ No remaining active M2 tickets. Next on the roadmap: **M3 vertical slice → M4 
 M3 in progress: 0015 (baseline gate), 0016 (manifest-integrity fixture freeze, ctest now 5/5) and
 0017 (selection diagnostics: `M3_INFO` identity line on every selection, dynamic window title
 `<id> [placeholder] | noto3d (M3)`, `--list-assets` pre-GL diagnostic CLI) are complete; 0018
-(human Noto-category verification) is open. Active tickets live in `docs/ticket/`.
+(human Noto-category verification) is open. The M3 milestone spec is **embedded in ADR-0009**
+(§ Spec — per DOCUMENTATION-LIFECYCLE, specs live at the ADR layer); `docs/ticket/` holds
+execution tickets only, rolled under accepted ADRs.
 M0 scope, user stories and acceptance matrix: `docs/archive/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
 Project overview / build / test quickstart: repo-root `README.md`.
@@ -104,7 +106,7 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
       (authored as ticket 0010 — **completed**; all six deps on immutable SHA).
 - [ ] M3 vertical slice → M4 scene → M5 ImGui editor (next roadmap milestones).
 
-## Execution tickets (all complete; docs/ticket/ empty, archived at docs/archive/ticket/)
+## Execution tickets (active ones live in docs/ticket/; completed archived at docs/archive/ticket/)
 - M0: 0001 (spec) + 0002–0004 (execution) — complete
 - M1: 0005 (Mesh GPU upload), 0006 (Material/shader + first draw), 0007 (pass hygiene,
   superseded by 0012) — complete
@@ -114,9 +116,10 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
 - 0012 (M1 app/renderer separation + registry integration) — complete; closes 0009's E2E gate
 - 0010 (dependency pinning) — complete; infra track
 
-### M3 (open; docs/ticket/ holds 0018)
+### M3 (spec in ADR-0009; open execution ticket 0018 in docs/ticket/)
 - 0015 (M3 baseline gate), 0016 (asset-set freeze: manifest_integrity_test.cpp), 0017 (selection
   diagnostics + window-title identity + `--list-assets`) — complete, archived
+- 0018 (human Noto-category verification) — open, awaiting manual matrix
 
 ## Known MVP limitations
 - No transparent-object depth sorting.

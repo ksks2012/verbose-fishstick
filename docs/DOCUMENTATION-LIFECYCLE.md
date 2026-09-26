@@ -46,13 +46,15 @@ project/
 │   ├── CONTEXT.md          # current implementation truth (consolidates Accepted ADRs)
 │   ├── DEFINITION.md       # canonical project noun definitions (glossary)
 │   ├── CHANGELOG.md        # version history and milestone summaries (single location)
-│   ├── adr/                # architecture decision records (never deleted, marked Superseded)
-│   ├── ticket/             # specs/issues (to-spec format); checklists live here, not in ADRs
+│   ├── adr/                # architecture decision records (never deleted, marked Superseded);
+│   │                       #   milestone specs (PRDs) also live here, embedded in their ADR
+│   ├── ticket/             # execution tickets derived from accepted ADRs; checklists live here,
+│   │                       #   not in ADRs (specs do NOT live here — move/copy to the ADR layer)
 │   ├── standards/          # development and technical standards
 │   └── archive/            # archive directory (suggested for .gitignore)
 │       ├── ticket/         # completed tickets (empty in docs/ticket/)
 │       ├── summary/        # completed session summaries
-│       └── adr/            # superseded ADRs (empty until needed)
+│       └── adr/            # superseded ADRs / displaced specs (content merged into a live ADR)
 </pre>
 
 > `CHANGELOG.md` has exactly one home: `docs/CHANGELOG.md`. Do not create a root-level copy.

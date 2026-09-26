@@ -52,4 +52,4 @@ Roles: 0015 = baseline fence · 0016 = fixture freeze · 0017 = runtime observab
 > removed). Window title verified via `xprop WM_NAME` = `top_hat [placeholder] | noto3d (M3)`.
 > `--demo` still `M2_OK (0009 E2E)`; invalid flags still exit 1. dev + release ctest 5/5.
 **Points to ADR:** 0008 (CLI/diagnostics; no new renderer surface)
-**Rolls under spec:** 0019 (M3 milestone spec)
+**Rolls under spec:** ADR-0009 (M3 spec embedded; execution tickets only in docs/ticket/)
