@@ -16,12 +16,48 @@ Document hierarchy (per `docs/DOCUMENTATION-LIFECYCLE.md`):
 - **emoji_editor** — the C++20/OpenGL desktop application that composes scenes from
   **Noto 3D-style emoji** assets. See project description in `CONTEXT.md`.
 
-## Composition domain
+## Composition / Scene domain
 
-- **Scene** — the current composition being edited. It stores only stable **asset IDs** plus
-  per-**entity** `Transform`/`Material`; never OBJ/PNG/GPU identities.
-- **Entity** — one instance of an **asset** in a scene (an ID reference + transform + material).
-- **Transform** — position / rotation / scale in Y-up, −Z forward space.
+- **Scene** — the current composition being edited (M4+ = `noto3d::scene::Scene`): a **pure-data**,
+  flat collection of **Entities** (stable **EntityId**, `name`, `assetId`, world **Transform**).
+  It never references the AssetRegistry, a Model, GPU objects, renderer state, or a logger; an
+  unresolved `assetId` never invalidates the Scene (the runtime resolves and skips it).
+- **Entity** — one instance of an **asset** in a scene. M4 shape:
+  `{ EntityId id; std::string name; std::string assetId; Transform transform; }`. Since M4 is a
+  flat world-space list, `transform` IS the world transform (no hierarchy). Per-entity
+  Material/MaterialOverride is deferred to M5/M6 (the old "entity = id + transform + material"
+  phrasing predates ADR-0010).
+- **EntityId** — `std::uint32_t`, `0` = **InvalidEntityId**. Monotonic counter from 1 for the life
+  of the Scene; **never reused** (destroyed ids, and `clear()` does not reset the counter). An
+  identity, never a storage index (id ≠ vector position). The single identity (runtime =
+  persistent) for M6.
+- **Transform** — per-entity position / rotation / scale, in Y-up, −Z forward **world space**.
+  Rotation = Euler **radians**, YXZ order: `x = pitch`, `y = yaw`, `z = roll`.
+- **modelMatrix** — `scene::modelMatrix(transform)`: the single transform→matrix definition,
+  `M = T·R·S`, YXZ via `glm::eulerAngleYXZ` (sole implementation; an experimental GTX API —
+  `GLM_ENABLE_EXPERIMENTAL` stays TU-local). 0022/0024 never recompose matrices.
+- **Scene snapshot (M6 forward contract)** — a Scene JSON file is a **complete snapshot**; loading
+  **replaces** the whole Scene (entities + id allocation state), never merges; loader sets
+  `nextEntityId = max(restored ids) + 1` (empty → 1).
+- **m4_vertical_scene** — the default M4 fixture scene: `smile@(-1.5,0,0)`, `crown@(0,0,0)`,
+  `sunglasses@(1.5,0,0)`.
+- **demo_checker / demo mode** — `--demo` runs the **0014 demo fixture as a demo-only Scene**
+  (never an append to the default scene): the Scene holds **exactly one Entity**
+  (`assetId = "demo_checker"`, identity transform). `demo_checker` is an **out-of-manifest**
+  fixture entity/asset (geometry_source = placeholder) resolved via the registry's standalone
+  `loadModelFile` path (ADR-0007 amendment), carrying a small sRGB checker texture.
+- **DrawItem** — frame-local orchestration data `{ const renderer::Model* model; std::string
+  assetId; glm::mat4 modelMatrix; }` produced by `app::collectDrawItems`. `model` is a **borrowed
+  pointer**, valid only for the current frame / draw-list result — never retained across
+  `AssetRegistry` mutation/reload. No cache/dedup (asset identity ≠ entity identity).
+- **Resolver** — `app::collectDrawItems`' injectable `(assetId) -> const Model*` seam; null ⇒
+  skip, not failure. **Must be callable**: an empty resolver is a programming error, never a
+  supported runtime state.
+- **Camera** — `noto3d::renderer::Camera`: a pure-math orbit/zoom/pan value object (no GL/Scene/
+  GLFW). Spherical convention is locked in ADR-0010 Q7 (eye = target + spherical offset,
+  `yaw/pitch/distance`); initial state reproduces the exact M3 eye `(0,0.5,3)`; `orbit` yaw/pitch
+  signs, `pan` world-unit camera-local semantics, and `zoom` `distance = clamp(distance - delta,
+  0.5, 20)` are contracts, not implementer choices.
 
 ## Asset domain
 
@@ -114,4 +150,5 @@ Document hierarchy (per `docs/DOCUMENTATION-LIFECYCLE.md`):
 | "fallback / substitution" when a load fails | FAILED → disable + diagnostic | ADR-0007; cube is a test asset, not a substitution path |
 | "texture" for a reference PNG | reference_image | ADR-0002; metadata-only |
 | "model" for a placeholders OBJ | placeholder geometry | placeholder is a geometry source, not the scene's model |
+| "`--demo` appends to the default scene" | demo fixture = the whole Scene | ADR-0010 Q6; demo-only mode, never default + append |
 | `glGetString(GL_VERSION)` prefix/string parsing for capability detection | numeric capability check | ADR-0004 |
