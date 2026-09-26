@@ -206,6 +206,16 @@ noto3d_set_warnings(noto3d-registry-tests)
 noto3d_apply_sanitizers(noto3d-registry-tests)
 add_test(NAME asset-registry-contract COMMAND noto3d-registry-tests)
 
+# Ticket 0016 — M3 Noto asset set verification & freeze: direct manifest-contract
+# check (parse JSON + resolve paths + SHA-256), independent of AssetRegistry.
+add_executable(noto3d-manifest-tests tests/asset/manifest_integrity_test.cpp)
+target_link_libraries(noto3d-manifest-tests PRIVATE noto3d_core nlohmann_json::nlohmann_json)
+target_compile_definitions(noto3d-manifest-tests PRIVATE
+    NOTO3D_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
+noto3d_set_warnings(noto3d-manifest-tests)
+noto3d_apply_sanitizers(noto3d-manifest-tests)
+add_test(NAME asset-manifest-integrity COMMAND noto3d-manifest-tests)
+
 # ---------------------------------------------------------------------------
 # Renderer library (ADR-0006)
 # ---------------------------------------------------------------------------

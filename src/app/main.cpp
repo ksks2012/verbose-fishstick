@@ -35,18 +35,19 @@
 
 namespace {
 
-const char* kWindowTitle = "noto3d-editor (M2)";
+const char* kWindowTitle = "noto3d (M3)";
 const int   kInitialW    = 1280;
 const int   kInitialH    = 720;
 
-// Command-line options for the M2 demo runner.
+// Command-line options for the demo runner.
 struct Options {
     int frameLimit = -1;                  // < 0 = unlimited
     std::optional<std::string> assetId;   // manifest asset to render (default: first renderable)
     bool  demo   = false;                 // also render the 0014 demo_checker fixture (textured)
+    bool  listAssets = false;             // diagnostic CLI: print manifest assets, exit pre-GL
 };
 
-// Parses --frames=N (validated, ticket 0011-⑨), --asset=<id>, --demo.
+// Parses --frames=N (validated, ticket 0011-⑨), --asset=<id>, --demo, --list-assets.
 // Returns false → caller exits non-zero with a diagnostic (never a silent false-green).
 bool parseOptions(int argc, char** argv, Options& out) {
     for (int i = 1; i < argc; ++i) {
@@ -76,9 +77,42 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.assetId = id;
         } else if (std::strcmp(arg, "--demo") == 0) {
             out.demo = true;
+        } else if (std::strcmp(arg, "--list-assets") == 0) {
+            out.listAssets = true;
         }
     }
     return true;
+}
+
+const char* geometrySourceName(const noto3d::asset::AssetEntry& e) {
+    using noto3d::asset::GeometrySource;
+    if (!e.geometrySource) return "null";
+    return *e.geometrySource == GeometrySource::Placeholder ? "placeholder" : "official";
+}
+
+const char* referenceName(const noto3d::asset::AssetEntry& e) {
+    return e.referenceImage ? e.referenceImage->c_str() : "(none)";
+}
+
+// ---- C — --list-assets diagnostic CLI (ticket 0017) ------------------------
+// Loads the manifest to CPU only (no GL context), prints id / geometry source /
+// reference per asset, then exits 0.  Not a new asset-pipeline capability: it is
+// the existing loadManifestOnly + entries() path, used as a pre-GL diagnostic.
+static int listAssetsCommand() {
+    noto3d::asset::AssetRegistry registry;
+    const auto loadR = registry.loadManifestOnly(
+        std::string(NOTO3D_ASSETS_DIR) + "/manifest.json");
+    for (const auto& d : loadR.diagnostics) {
+        NOTO3D_WARN("M3_WARN  [{}] {}",
+                    d.assetId.empty() ? "manifest" : d.assetId, d.message);
+    }
+    NOTO3D_INFO("M3_ASSETS version=1");
+    for (const auto& e : registry.entries()) {
+        NOTO3D_INFO("M3_ASSETS id='{}' geometry={} reference={}",
+                    e.id, geometrySourceName(e), referenceName(e));
+    }
+    NOTO3D_INFO("M3_ASSETS end count={}", static_cast<int>(registry.entries().size()));
+    return EXIT_SUCCESS;
 }
 
 void glfwErrorCallback(int code, const char* desc) {
@@ -241,12 +275,18 @@ static int run(const Options& opts) {
                         loadR.loaded, loadR.warned, loadR.failed);
 
             // Select the asset to render: explicit id wins, else first renderable.
+            // A — every selection (default or --asset=) prints the SAME identity
+            // line; reference_image stays metadata-only (ADR-0002).
             const noto3d::renderer::Model* sceneModel = nullptr;
+            const noto3d::asset::AssetEntry* selectedEntry = nullptr;
             if (opts.assetId) {
                 const noto3d::asset::AssetEntry* entry = registry.findEntry(*opts.assetId);
                 if (!entry) {
                     ok = fail(("M2_FAIL: unknown asset '" + *opts.assetId + "'").c_str());
                 } else {
+                    selectedEntry = entry;
+                    NOTO3D_INFO("M3_INFO  selected asset '{}' geometry={} reference={}",
+                                entry->id, geometrySourceName(*entry), referenceName(*entry));
                     sceneModel = registry.model(entry->id);
                     if (!sceneModel) {
                         NOTO3D_WARN("M2_WARN  asset '{}' has no GPU geometry "
@@ -256,8 +296,10 @@ static int run(const Options& opts) {
             } else {
                 for (const auto& e : registry.entries()) {
                     if (const auto* m = registry.model(e.id)) {
+                        selectedEntry = &e;
+                        NOTO3D_INFO("M3_INFO  selected asset '{}' geometry={} reference={}",
+                                    e.id, geometrySourceName(e), referenceName(e));
                         sceneModel = m;
-                        NOTO3D_INFO("M2_INFO  rendering manifest asset '{}'", e.id);
                         break;
                     }
                 }
@@ -290,6 +332,15 @@ static int run(const Options& opts) {
                     ok = fail("M2_FAIL: demo fixture failed to load");
                 }
             }
+
+            // B — dynamic window title reflects the selected asset (ticket 0017):
+            // "<id> [<source>] | noto3d (M3)" via existing GLFW API, no text renderer.
+            std::string title = "noto3d (M3)";
+            if (selectedEntry) {
+                title = selectedEntry->id + " [" + geometrySourceName(*selectedEntry) +
+                        "] | noto3d (M3)";
+            }
+            glfwSetWindowTitle(window, title.c_str());
 
             if (ok && !sceneModel && !demoModel) {
                 ok = fail("M2_FAIL: nothing to render");
@@ -346,6 +397,10 @@ int main(int argc, char** argv) {
     Options opts;
     if (!parseOptions(argc, argv, opts)) {
         return EXIT_FAILURE;
+    }
+    // --list-assets exits before any GL context is created (ticket 0017).
+    if (opts.listAssets) {
+        return listAssetsCommand();
     }
     return run(opts);
 }

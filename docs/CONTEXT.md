@@ -24,8 +24,12 @@ verified. Completed tickets are archived at `docs/archive/ticket/`. Working tree
 - 0010 done: all six Git deps pinned by immutable SHA (each resolves to its release tag);
   no archive sources → `URL_HASH` n/a; dev + release configure/build + `ctest` green.
 
-No remaining active tickets. Next on the roadmap: **M3 vertical slice → M4 scene → M5 ImGui**
+No remaining active M2 tickets. Next on the roadmap: **M3 vertical slice → M4 scene → M5 ImGui**
 (ADR-0005 ImGui-limitation note at the Renderer's `End3DPass()`; `lib/imgui` already fetched).
+M3 in progress: 0015 (baseline gate), 0016 (manifest-integrity fixture freeze, ctest now 5/5) and
+0017 (selection diagnostics: `M3_INFO` identity line on every selection, dynamic window title
+`<id> [placeholder] | noto3d (M3)`, `--list-assets` pre-GL diagnostic CLI) are complete; 0018
+(human Noto-category verification) is open. Active tickets live in `docs/ticket/`.
 M0 scope, user stories and acceptance matrix: `docs/archive/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
 Project overview / build / test quickstart: repo-root `README.md`.
@@ -78,6 +82,15 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   macros, single replaceable call-site spelling; spdlog fetched into lib/spdlog, pinned — ADR-0008
   amendment); -Wall -Wextra -Wpedantic, -Werror optional; CMake presets dev/release;
   dependency-free tests, headless; git on main, .context ignored.
+- ADR-0009: M3 vertical slice — scope = existing 6 frozen assets only (no new assets/OBJs/schema,
+  no renderer/GL/text capability). Chain: 0015 baseline fence (pure verification; runtime-string
+  changes deferred to 0017) → 0016 fixture freeze (manifest contract verified DIRECTLY via JSON +
+  filesystem + SHA-256, never through the AssetRegistry; `kM3FrozenAssetIds` = exactly the 6 IDs,
+  `demo_checker` excluded) → 0017 observability (single identity line on every selection, dynamic
+  window title `<id> [<source>] | noto3d (M3)`, pre-GL `--list-assets` diagnostic CLI) → 0018
+  human category verification (one-shot manual matrix; exclusions locked: no runtime reference
+  loading, no screenshot/readback, no similarity, no ReferencePreview — M5 UI territory).
+  M4 deferred until M3 closes.
 
 ## Key external facts (Sep 2026)
 - googlefonts/noto-emoji: zero mesh files on any branch; `3D/` = fonts (TTF) + png (≤512px);
@@ -100,6 +113,10 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
 - 0011 (M1 code-quality deferred — ⑦⑧⑨⑩) — folded into 0012, complete
 - 0012 (M1 app/renderer separation + registry integration) — complete; closes 0009's E2E gate
 - 0010 (dependency pinning) — complete; infra track
+
+### M3 (open; docs/ticket/ holds 0018)
+- 0015 (M3 baseline gate), 0016 (asset-set freeze: manifest_integrity_test.cpp), 0017 (selection
+  diagnostics + window-title identity + `--list-assets`) — complete, archived
 
 ## Known MVP limitations
 - No transparent-object depth sorting.

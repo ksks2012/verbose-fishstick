@@ -44,7 +44,7 @@ Machine prereq (one-time): `sudo apt install libxinerama-dev libxcursor-dev libx
 ```bash
 cmake --preset dev                      # configure (Debug + sanitizer option)
 cmake --build build/dev -j               # build
-ctest --test-dir build/dev               # headless tests (4 suites)
+ctest --test-dir build/dev               # headless tests (5 suites)
 build/dev/noto3d-editor --frames=5       # non-interactive smoke: prints M0_OK / M1_DONE
 build/dev/noto3d-editor                  # interactive window
 ```

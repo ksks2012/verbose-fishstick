@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## [Unreleased] — M3 Noto vertical slice (in progress)
+
+### M3 — asset observability (0015 + 0016 + 0017; 0018 open)
+- 0015 baseline gate: stale-wording scan across docs (no M2-chain residue); fresh configure +
+  build + `ctest` green on dev/dev-clean/release as the M3 baseline. Smoke markers left untouched
+  (0017 owns runtime identity).
+- 0016 fixture freeze: `tests/asset/manifest_integrity_test.cpp` added — dependency-free headless
+  suite that parses `assets/manifest.json` directly (no AssetRegistry) and verifies the M3 frozen
+  fixture contract: exactly `smile, warm, cool, crown, top_hat, sunglasses`, `demo_checker`
+  excluded, `geometry_source == placeholder` + ADR-0007 nullness invariant, reference/geometry
+  files exist and SHA-256 == `metadata.reference_sha256`/`geometry_sha256` (FIPS 180-4 SHA-256
+  implemented in-file, KAT-verified; geometry hash doubles as the shared-placeholder invariant),
+  `axis_data.up_axis ∈ {x,y,z}`, expected placeholder mapping. ctest now 5/5 on dev + release.
+- 0017 selection diagnostics: every selection (default or `--asset=`) prints one identity line
+  `M3_INFO selected asset '<id>' geometry=<source> reference=<path>` (old default-only M2_INFO
+  line removed); dynamic window title `<id> [placeholder] | noto3d (M3)` via existing
+  `glfwSetWindowTitle`; `--list-assets` diagnostic CLI prints `M3_ASSETS` header + one line per
+  asset via `loadManifestOnly`/`entries()` and exits 0 before any GL context. No renderer/GL/text
+  capability added; frame-limit/asset/demo exit codes unchanged.
+- Docs: ADR-0009 records the locked M3 decisions (fence→freeze→observe→verify; fixture contract
+  verified independently of `AssetRegistry`; pre-GL `--list-assets`; 0018 exclusions);
+  `docs/ticket/0019` is the M3 milestone spec (0001-style) that execution tickets 0015–0018 roll
+  under; CONTEXT updated in the same change.
+
 ## [Unreleased] — M1 + M2 (complete)
 
 ### M2 complete (0008/0014/0009/0013 + 0012/0011/0010)
