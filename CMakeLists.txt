@@ -245,6 +245,24 @@ noto3d_apply_sanitizers(noto3d-material-tests)
 add_test(NAME renderer-material-contract COMMAND noto3d-material-tests)
 
 # ---------------------------------------------------------------------------
+# Scene library (ADR-0010 Q1–Q4) — pure data, glm only; never links asset/renderer
+# ---------------------------------------------------------------------------
+add_library(noto3d_scene STATIC
+    src/scene/scene.cpp)
+target_include_directories(noto3d_scene PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/scene)
+target_link_libraries(noto3d_scene
+    PUBLIC  glm::glm)
+noto3d_set_warnings(noto3d_scene)
+noto3d_apply_sanitizers(noto3d_scene)
+
+add_executable(noto3d-scene-tests tests/scene/scene_test.cpp)
+target_link_libraries(noto3d-scene-tests PRIVATE noto3d_scene noto3d_core)
+noto3d_set_warnings(noto3d-scene-tests)
+noto3d_apply_sanitizers(noto3d-scene-tests)
+add_test(NAME scene-entity-contract COMMAND noto3d-scene-tests)
+
+# ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
 add_executable(noto3d-editor src/app/main.cpp)
