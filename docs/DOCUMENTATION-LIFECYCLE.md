@@ -50,8 +50,9 @@ project/
 │   ├── ticket/             # specs/issues (to-spec format); checklists live here, not in ADRs
 │   ├── standards/          # development and technical standards
 │   └── archive/            # archive directory (suggested for .gitignore)
-│       ├── summaries/      # completed session summaries
-│       └── tickets/        # completed tickets
+│       ├── ticket/         # completed tickets (empty in docs/ticket/)
+│       ├── summary/        # completed session summaries
+│       └── adr/            # superseded ADRs (empty until needed)
 </pre>
 
 > `CHANGELOG.md` has exactly one home: `docs/CHANGELOG.md`. Do not create a root-level copy.

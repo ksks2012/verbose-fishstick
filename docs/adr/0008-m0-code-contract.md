@@ -27,3 +27,12 @@ rework in module boundaries, error handling, logging, build discipline and docs 
 ## Consequences
 - Foundation decision tree (Q1–Q8) is closed; subsequent questions are implementation discovery,
   not architecture speculation.
+
+## Amendment (M2 / ticket 0010, 2026-09) — Log backend
+The custom `noto3d::core::Log` spelling is built on **spdlog**: `log_init()` singles a project-wide
+default logger, and the `NOTO3D_*` macros (log.hpp) are thin wrappers around spdlog's default
+logger so all noto3d code uses a single, replaceable call-site spelling — the only surface other
+modules use. spdlog is fetched into `lib/spdlog` at configure time and pinned to an immutable
+commit SHA by ticket 0010. The "no spdlog" decision is superseded in this precise sense: no
+third-party logger is passed around module APIs; the facade remains the single call-site spelling
+(ADR-0003's amendment records the dependency-strategy consequence).

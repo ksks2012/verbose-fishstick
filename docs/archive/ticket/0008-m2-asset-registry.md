@@ -55,9 +55,10 @@ Contract (ADR-0007):
 - [x] Explicit `reload()`; no watcher
 - [x] Headless tests in `tests/` for all of the above
 
-> Note: the `Full`-mode GPU upload path is implemented but not exercised by headless tests;
-> its runtime verification is manual per ADR-0008 (renderer paths are tested at the app level),
-> pending the app wiring `AssetRegistry::load()` in M3.
+> Note (updated 2026-09, ticket 0012): the `Full`-mode GPU upload path is now exercised at the
+> app level — 0012's registry integration wires `AssetRegistry::load()` in `noto3d-editor`
+> (`--asset=<id>` renders manifest models through the Full path). Headless tests remain CPU-only
+> by design (ADR-0008: renderer paths verified at the app level).
 
 **Points to ADR:** 0007 (registry/loader contract), 0001 (no implicit cube), 0002 (reference_image
 metadata-only), 0006 (Model/SubMesh/Material)

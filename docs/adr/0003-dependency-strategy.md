@@ -43,3 +43,15 @@ do not carry checklists; item-level status is tracked at ticket level.
 ## Consequences
 - FetchContent resolves network at configure time (offline thereafter for vendored parts).
 - Fresh checkout: `lib/` is missing until first configure; all clones land inside the repo tree.
+
+## Amendment (M2 / ticket 0010, 2026-09)
+- The M2 asset-pipeline spike decided the deferred **tinyobjloader** question the ADR left open:
+  it was fetched (OBJ/MTL parser, `lib/tinyobjloader`, v1.0.6) as part of ticket 0008.
+- **spdlog** was added as the logging backend of the custom `noto3d::core::Log` facade (see
+  ADR-0008 amendment), fetched into `lib/spdlog` (v1.14.1).
+- The lib/ clone layout now spans six Git deps: `glfw`, `glm`, `imgui`, `nlohmann_json`,
+  `tinyobjloader`, `spdlog` (all gitignored; glad + stb_image remain committed exceptions).
+- Pinning hardened by ticket 0010: all six Git deps are pinned to **immutable commit SHAs**
+  (each resolves exactly to its named release tag). No archive/URL sources exist, so `URL_HASH`
+  is n/a and is never recorded against a Git fetch. The original "tags now, SHA later" decision
+  is superseded for the current dependency set.

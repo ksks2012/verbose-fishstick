@@ -100,8 +100,9 @@ Document hierarchy (per `docs/DOCUMENTATION-LIFECYCLE.md`):
 ## Build / dependency domain
 
 - **lib/** — external dependency home (`lib/<name>`, mirrors `../reimagined-meme`); GLFW, GLM,
-  ImGui, nlohmann/json are cloned here at configure time (gitignored); glad + stb_image are
-  committed exceptions (not fetchable).
+  ImGui, nlohmann/json, tinyobjloader and spdlog are cloned here at configure time (gitignored),
+  each pinned to an immutable commit SHA (ticket 0010); glad + stb_image are committed
+  exceptions (not fetchable).
 - **machine prerequisites** — OS/toolchain packages needed to *build* fetched sources (e.g.
   `libxinerama-dev`, `libxcursor-dev`); may require one-time sudo. Distinct from project-owned
   dependencies, which require no sudo.

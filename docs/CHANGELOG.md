@@ -1,15 +1,26 @@
 # CHANGELOG
 
-## [Unreleased] — M1 + M2 (M1 done, M2 core done; 0009 E2E / 0012 / 0010 remain)
+## [Unreleased] — M1 + M2 (complete)
 
-### M2 — asset pipeline (core complete; tickets archived except 0009/0010/open 0012 items)
+### M2 complete (0008/0014/0009/0013 + 0012/0011/0010)
+- 0009 E2E & 0012 registry integration: `noto3d-editor` consumes the `AssetRegistry`;
+  `--asset=<id>` renders a manifest asset, `--demo` renders the 0014 fixture with its sRGB
+  diffuse texture (`M2_OK ... with diffuse texture (0009 E2E)`). 0011 ⑦⑧⑨⑩ folded in:
+  `#error` shader-dir, validated `--frames=` (non-numeric/negative → exit non-zero), inline
+  cube/optional ceremony removed, uniform-location cache in `ShaderProgram`. GL-owning objects
+  scoped to be destroyed while the context is current.
+- 0010 dependency pinning: all six Git deps pinned by immutable commit SHA (each resolves to its
+  release tag), `GIT_SHALLOW` retained, no archive sources (`URL_HASH` n/a); fresh dev + release
+  configure/build + `ctest` green.
+
+### M2 — asset pipeline (complete)
 - 0008 AssetRegistry: manifest.json v1 authoritative load, OBJ/MTL→SubMesh (material grouping,
   up-axis baking, canonical paths, CPU dedup), explicit `fallback_geometry` opt-in, tri-state
   SUCCESS / LOADED_WITH_WARNINGS / FAILED, explicit reload().
-- 0009 sRGB diffuse texture core: `renderer::Texture::fromFile` (GL_SRGB8_ALPHA8, mipmap/filter
+- 0009 sRGB diffuse texture: `renderer::Texture::fromFile` (GL_SRGB8_ALPHA8, mipmap/filter
   policy), `uHasTexture` branch (`finalAlpha = effectiveAlpha * sampledAlpha`), registry
-  `diffuseTextureRef → Texture` wiring, `GL_SRGB8_ALPHA8` compile-time pin. Manual E2E demo
-  render remains (pending app→registry wiring).
+  `diffuseTextureRef → Texture` wiring, `GL_SRGB8_ALPHA8` compile-time pin. E2E closed by 0012
+  (`noto3d-editor --demo`).
 - 0013 texture path safety: shared `isUnsafePath()` predicate reused from manifest paths for
   `diffuseTextureRef`; rejected texture refs promote the asset to `LOADED_WITH_WARNINGS`.
 - 0014 demo texture fixture: `assets/geometry/placeholders/demo_checker/` subtree + deterministic
@@ -22,7 +33,7 @@
   `effectiveAlpha = baseColor.a * opacity` with headless test.
 - 0007 pass hygiene, delivered as 0012's `renderer::Renderer` (Begin3DPass/End3DPass/submit;
   states once per pass, linear clear, cullEnabled per draw). 0011 deferred findings folded into
-  0012 (⑦⑧⑨ still open in main.cpp; ⑩ uniform-location caching open).
+  0012 and completed there (⑦⑧⑨ in main.cpp; ⑩ uniform-location caching).
 
 ### M0 / M0.5 (complete)
 - M0: build & environment baseline (tickets 0001–0004); green presets; M0_OK/M0_FAIL markers.

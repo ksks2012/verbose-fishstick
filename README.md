@@ -1,14 +1,15 @@
 # noto3d — Noto 3D Emoji Editor (MVP)
 
-C++/OpenGL editor MVP for Noto 3D-style emoji composition. As of the M2 milestone this is an
-engine slice — an asset pipeline plus a minimal windowed renderer — not yet an interactive editor
-(M4/M5).
+C++/OpenGL editor MVP for Noto 3D-style emoji composition. With M0–M2 complete this is an
+engine slice — an asset pipeline plus a minimal windowed renderer (manifest assets the user
+picks, plus a textured demo fixture) — not yet an interactive editor (M4/M5).
 
 - **Language / API:** C++20, OpenGL **3.3 Core** / GLSL 330, GLFW 3.4 (X11), GLM, ImGui (M5),
-  nlohmann/json, glad + stb_image (committed under `lib/`)
+  nlohmann/json, tinyobjloader (OBJ/MTL), spdlog (Log backend), glad + stb_image (committed under
+  `lib/`)
 - **Docs hierarchy:** `docs/CONTEXT.md` = current implementation truth; `docs/adr/` = decision
   history; `docs/DEFINITION.md` = project vocabulary; `docs/CHANGELOG.md` = milestone history;
-  `docs/ticket/` = active tickets, `docs/archive/ticket/` = completed.
+  `docs/archive/ticket/` = all execution tickets (complete); `docs/ticket/` = pending (empty).
 
 ## Status
 
@@ -17,7 +18,7 @@ engine slice — an asset pipeline plus a minimal windowed renderer — not yet 
 | **M0** | Build/env baseline (0001–0004) | ✅ complete — green configure/build/verify on dev, dev-clean, release |
 | **M0.5** | Asset contract spike (manifest + placeholders + references) | ✅ complete |
 | **M1** | Minimal renderer (0005–0007) | ✅ complete — Mesh upload, Material/shader/first draw, pass hygiene |
-| **M2** | Asset pipeline (0008–0014) | 🔵 core complete — `AssetRegistry` + OBJ/MTL→Mesh, sRGB diffuse texture pipeline, demo fixture, texture path safety |
+| **M2** | Asset pipeline (0008–0014) | ✅ complete — `AssetRegistry` + OBJ/MTL→Mesh, sRGB diffuse texture pipeline + E2E demo render, demo fixture, texture path safety |
 | M3/M4+ | Noto vertical slice / Scene / ImGui editor | ⏳ not started |
 
 ### Completed tickets (`docs/archive/ticket/`)
@@ -27,18 +28,14 @@ engine slice — an asset pipeline plus a minimal windowed renderer — not yet 
   Model/SubMesh/Material + GLSL 330 base shaders + first cube draw, 0007 pass hygiene
   (superseded by 0012; shipped as `renderer::Renderer`)
 - **M2:** 0008 AssetRegistry (manifest v1, OBJ/MTL→SubMesh, dedup, fallback_geometry, tri-state
-  SUCCESS/LOADED_WITH_WARNINGS/FAILED), 0013 texture path safety (shared `isUnsafePath()`
-  predicate), 0014 demo texture fixture (deterministic `generate_demo_texture.py`,
-  `demo_checker` subtree)
-- **0011** M1 code-quality deferred findings — folded into 0012
+  SUCCESS/LOADED_WITH_WARNINGS/FAILED), 0014 demo texture fixture (deterministic
+  `generate_demo_texture.py`, `demo_checker` subtree), 0009 sRGB diffuse texture pipeline
+  (E2E demo render via `--demo`), 0013 texture path safety (shared `isUnsafePath()`
+  predicate), 0012 app/renderer separation + registry integration, 0010 dependency pinning
+- **0011** M1 code-quality deferred findings (⑦⑧⑨⑩) — folded into 0012
 
-### Active tickets (`docs/ticket/`)
-
-- **0012** (in-progress): `renderer::Renderer` committed; finish main.cpp slim-down + wire
-  `AssetRegistry` into the app (closes 0009's E2E demo gate)
-- **0009** (in-progress): sRGB diffuse texture upload core committed; manual E2E demo render
-  pending 0012's registry integration
-- **0010** (ready): dependency pinning GIT_TAG → commit SHA + URL_HASH
+No active tickets. `docs/ticket/` is empty; all execution history lives under
+`docs/archive/ticket/`. Next roadmap milestone: **M3 Noto vertical slice**.
 
 ## Build & test
 
@@ -63,7 +60,8 @@ assets/                 manifest.json (v1, authoritative) + references/ (officia
 src/                    app/ main.cpp · core/ Log + GL capability · renderer/ Mesh/Model/
                         Material/ShaderProgram/Texture/Renderer · asset/ AssetRegistry+OBJ/MTL loader
 shaders/                GLSL 330 base.vert / base.frag
-lib/                    pinned deps (glad + stb_image committed; GLFW/GLM/ImGui/json fetched)
+lib/                    pinned deps (glad + stb_image committed; six Git deps fetched:
+                        GLFW/GLM/ImGui/json/tinyobjloader/spdlog, each on an immutable SHA)
 tests/                  dependency-free headless contract tests (asset/renderer/core)
 docs/                   CONTEXT/ADR/DEFINITION/CHANGELOG/ticket + archive
 ```
@@ -87,7 +85,7 @@ texture ref promotes the asset to `LOADED_WITH_WARNINGS` (geometry still renders
 
 ## Next steps
 
-1. **0012**: finish app/renderer separation (folded 0011 ⑦⑧⑨), wire AssetRegistry in →
-   0009 E2E demo render (checker texture on screen = manual close).
-2. **0010**: dependency pinning to commit SHA.
-3. M3 noto vertical slice, M4 scene, M5 ImGui editor.
+1. **M3 Noto vertical slice** — render a real Noto-emoji placeholder set from the manifest and
+   compare against reference PNGs; official OBJ release swaps `geometry_source` (watch item).
+2. **M4 Scene** (multi-asset composition, transforms) and **M5 ImGui editor** (overlay owns its
+   GL state; ADR-0005 handoff point = `Renderer::End3DPass()`; `lib/imgui` already fetched).
