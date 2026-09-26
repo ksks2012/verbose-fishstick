@@ -1,6 +1,7 @@
 # M0 — Build & environment baseline (spec)
 
-Status: ready-for-agent
+Status: completed (M0 delivered — configure/build/verify green on dev, dev-clean, release;
+ticket archived from active queue once M0 is done)
 Type: task
 
 > Spec for milestone M0, written per the to-spec format. ADRs (0001–0008) and
@@ -93,7 +94,7 @@ acceptance matrix below is fully checked.
   - [x] GLM 1.0.1 tag resolves → clones into `lib/glm`
   - [x] ImGui `v1.92.9-docking` tag resolves → clones into `lib/imgui`
   - [x] nlohmann/json `v3.11.3` tag resolves → clones into `lib/nlohmann_json`
-  - [ ] `lib/glad` + `lib/stb` committed (clones gitignored committed – awaiting manual commit by the user)
+  - [x] `lib/glad` + `lib/stb` committed as non-fetchable exceptions (clones gitignored)
 
   Dependency build (blocked by Q9 machine prerequisite):
   - [x] GLFW 3.4 builds

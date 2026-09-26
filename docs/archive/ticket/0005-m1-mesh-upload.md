@@ -21,14 +21,14 @@ shaders (ADR-0001 — the cube is an explicit test asset, never an implicit fall
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** completed (implemented + committed + tested; archived from active queue)
 
-- [ ] `renderer::Vertex` (pos+normal+uv) with `static_assert(sizeof(Vertex) == 32)`
-- [ ] `renderer::Mesh` owns interleaved VBO + EBO + VAO; uploaded once; immutable after upload;
+- [x] `renderer::Vertex` (pos+normal+uv) with `static_assert(sizeof(Vertex) == 32)`
+- [x] `renderer::Mesh` owns interleaved VBO + EBO + VAO; uploaded once; immutable after upload;
       movable, non-copyable
-- [ ] Indices bound as `GL_UNSIGNED_INT`
-- [ ] CPU arrays are construction inputs; no post-upload vertex/index mutation API
-- [ ] GPU handles released exactly once (RAII); move transfers ownership; moved-from safe
-- [ ] No rendering or state obligations (first draw = 0006, pass state = 0007)
+- [x] Indices bound as `GL_UNSIGNED_INT`
+- [x] CPU arrays are construction inputs; no post-upload vertex/index mutation API
+- [x] GPU handles released exactly once (RAII); move transfers ownership; moved-from safe
+- [x] No rendering or state obligations (first draw = 0006, pass state = 0007)
 
 **Points to ADR:** 0006 (mesh contract), 0001 (cube = explicit test asset only)

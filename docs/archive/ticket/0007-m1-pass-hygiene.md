@@ -22,12 +22,12 @@ Known MVP limitation (documented, not backlog): no transparent-object depth sort
 
 **Blocked by:** 0006
 
-**Status:** ready-for-agent
+**Status:** superseded by 0012 — implemented via `renderer::Renderer` (commit `21a9579`); archived
 
-- [ ] `Begin3DPass()` establishes the full ADR-0005 state block (depth/cull/blend/multisample/
+- [x] `Begin3DPass()` establishes the full ADR-0005 state block (depth/cull/blend/multisample/
       linear clear color); `End3DPass()` terminates the pass
-- [ ] `Material::cullEnabled` honored per draw; `recorded_winding` never flips GL state
-- [ ] States set once per pass, not per draw call; no snapshot/restore machinery at M1
-- [ ] ImGui-pass state ownership documented as an M5 responsibility (no overlay code at M1)
+- [x] `Material::cullEnabled` honored per draw; `recorded_winding` never flips GL state
+- [x] States set once per pass, not per draw call; no snapshot/restore machinery at M1
+- [x] ImGui-pass state ownership documented as an M5 responsibility (no overlay code at M1)
 
 **Points to ADR:** 0005 (renderer state contract)

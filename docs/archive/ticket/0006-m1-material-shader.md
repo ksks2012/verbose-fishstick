@@ -26,14 +26,14 @@ headless-safe dependency-free test in `tests/`.
 
 **Blocked by:** 0005
 
-**Status:** ready-for-agent
+**Status:** completed (implemented + committed + tested; archived from active queue)
 
-- [ ] `renderer::Model`, `renderer::SubMesh`, `renderer::Material` as specified (ADRs 0005/0006)
-- [ ] `effectiveAlpha = baseColor.a * opacity` implemented and tested in `tests/`
-- [ ] GLSL `#version 330 core` vertex + fragment shaders in `shaders/`; fragment outputs
+- [x] `renderer::Model`, `renderer::SubMesh`, `renderer::Material` as specified (ADRs 0005/0006)
+- [x] `effectiveAlpha = baseColor.a * opacity` implemented and tested in `tests/`
+- [x] GLSL `#version 330 core` vertex + fragment shaders in `shaders/`; fragment outputs
       `vec4(baseColor.rgb, effectiveAlpha)` (linear out; sRGB framebuffer converts)
-- [ ] M1 base shader does not sample `Material::texture` (bind/sample deferred to 0009)
-- [ ] No shader branching on missing vertex data (loader canonicalizes upstream in 0008)
-- [ ] First visible draw: cube test asset rendered with material defaults (manual verification)
+- [x] M1 base shader does not sample `Material::texture` (bind/sample deferred to 0009)
+- [x] No shader branching on missing vertex data (loader canonicalizes upstream in 0008)
+- [x] First visible draw: cube test asset rendered with material defaults (manual verification)
 
 **Points to ADR:** 0006 (data contract, material, effectiveAlpha)
