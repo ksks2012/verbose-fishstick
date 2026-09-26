@@ -26,14 +26,17 @@ the M1/M2 chain.
 
 **Blocked by:** M0 completion
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Git-sourced deps (GLFW, GLM, ImGui, nlohmann/json) pinned by immutable commit SHA
-- [ ] Where an archive source is used instead of Git, `URL + URL_HASH` provided; `URL_HASH` never
-      recorded against a Git-tag fetch
-- [ ] Recorded SHAs match the current fetched revisions (verified via FetchContent download)
-- [ ] `GIT_SHALLOW` retained only where it works; not required unconditionally
-- [ ] Fresh configure/build green on dev/release; `ctest` green; binary links
-- [ ] No new system/tooling requirements; `lib/<name>` + gitignore contract unchanged
+- [x] Git-sourced deps pinned by immutable commit SHA — verified **all six** (GLFW, GLM, ImGui,
+      nlohmann/json, tinyobjloader, spdlog): `lib/<name> HEAD == CMake GIT_TAG` for each
+- [x] No archive/URL sources exist → `URL + URL_HASH` is n/a; `URL_HASH` never recorded against
+      a Git-tag fetch
+- [x] Recorded SHAs match the current fetched revisions (verified via `git rev-parse HEAD` in
+      each `lib/<name>`) AND each resolves exactly to its named release tag (`3.4`, `1.0.1`,
+      `v1.92.9-docking`, `v3.11.3`, `v1.0.6`, `v1.14.1`)
+- [x] `GIT_SHALLOW` retained where it works — kept as `TRUE` for all (fetches build green)
+- [x] Fresh configure/build green on dev/release; `ctest` green (4/4 both); binary links
+- [x] No new system/tooling requirements; `lib/<name>` + gitignore contract unchanged
 
 **Points to ADR:** 0003 (dependency strategy: tags now → SHA/URL_HASH later)

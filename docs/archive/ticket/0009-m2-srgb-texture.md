@@ -65,7 +65,7 @@ Contract:
 **Blocked by:** 0014 for end-to-end demo verification only (core implementation does not wait on
 0014; the 0008 → 0014 → 0009 chain supersedes the old 0008 → 0009 ordering)
 
-**Status:** in-progress
+**Status:** completed
 
 - [x] Regression check: `static_assert(sizeof(Vertex) == 32)` remains present at
       `src/renderer/mesh.hpp` (ADR-0006 Vertex-stride invariant; 0009 does not modify Mesh)
@@ -81,15 +81,16 @@ Contract:
       bool uHasTexture`; `uDiffuse` — no sample when false)
 - [x] Fragment shader samples diffuse; OpenGL sRGB sampling converts to linear (shader does not
       decode); shader outputs linear RGB + `finalAlpha`
-- [ ] Consumes the 0014 fixture: `Material.diffuseTextureRef` → `Texture::fromFile` (`GL_SRGB8_ALPHA8`)
-      → demo render; Reference PNGs (`assets/references/**`) never bound — **E2E demo verification
-      (manual per ADR-0008): pending — the editor does not yet consume the AssetRegistry (app
-      wiring is 0012 territory)**
+- [x] Consumes the 0014 fixture: `Material.diffuseTextureRef` → `Texture::fromFile` (`GL_SRGB8_ALPHA8`)
+      → demo render; Reference PNGs (`assets/references/**`) never bound — **E2E demo verified
+      via `noto3d-editor --demo --frames=1` (dev + release)**: asset loads through the registry's
+      standalone path, `demo_checker.png` uploads 16×16 4ch → `GL_SRGB8_ALPHA8`,
+      `diffuseTextureRef → texture` wired, `M2_OK ... with diffuse texture (0009 E2E)`.**
 
 > Implementation progress: committed `6225dac` (`renderer::Texture::fromFile` + GL_SRGB8_ALPHA8 +
 > mipmap/filter policy, shader sampling + `finalAlpha`, registry `diffuseTextureRef → Texture`
 > wiring); staged: `static_assert(kDiffuseInternalFormat == GL_SRGB8_ALPHA8)`, shader
-> bool/branch refinement. Remaining: manual E2E demo render once the editor consumes the registry.
+> bool/branch refinement. E2E now closed by 0012's registry integration (`--demo`).
 
 **Points to ADR:** 0004 (sRGB baseline, texture format & color pipeline), 0006 (texture? material
 slot, effectiveAlpha), 0002/0007 (reference_image metadata-only)

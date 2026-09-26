@@ -25,3 +25,12 @@ sacrificed for demo resilience.
 ## Consequences
 - Scene JSON contains asset IDs, never GPU identities.
 - Official-mesh arrival = manifest edit + reload, not scene migration.
+
+## Amendment (ticket 0012/0014, 2026-09)
+Standalone (manifest-independent) entry points — `AssetRegistry::loadModelShapesOnly() /
+loadModelFile()` — accept an explicit, caller-trusted absolute OBJ path (e.g. the app's
+`NOTO3D_ASSETS_DIR`-derived demo path). This is an app-facing escape hatch for fixtures that are
+deliberately kept out of `manifest.json` (0014 decision); it does not move the manifest's "paths
+relative to parent, no absolute paths" contract. The ADR-0007 path predicate retains full effect
+where it protects rooted-relative resolution: still applies to every manifest field and to every
+material `diffuseTextureRef` (ticket 0013) in both load paths — never bypassed.

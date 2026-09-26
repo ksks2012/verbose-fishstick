@@ -391,7 +391,7 @@ void testReferenceImageNeverTexture() {
     //   → After loadManifestOnly(), all textures are null AND diffuseTextureRef is unset.
     const std::filesystem::path manifest(NOTO3D_ASSETS_DIR "/manifest.json");
     AssetRegistry reg;
-    reg.loadManifestOnly(manifest);
+    (void)reg.loadManifestOnly(manifest);  // headless surface: entries/status only
 
     for (const auto& e : reg.entries()) {
         // referenceImage being set must not cause texture upload
@@ -611,11 +611,63 @@ void testTexturePathSafety() {
     })");
     {
         AssetRegistry reg;
-        reg.loadManifestOnly(safe_m.path);
+        (void)reg.loadManifestOnly(safe_m.path);
         // Safe path passes the predicate; status is Success (geometry has all normals/UVs)
         check(reg.assetStatus("safe_tex") != LoadStatus::Failed,
               "tex-safety: safe relative texture path → not Failed");
     }
+}
+
+// ---------------------------------------------------------------------------
+// 0012: standalone (manifest-independent) OBJ/MTL load — headless CPU surface
+// ---------------------------------------------------------------------------
+void testStandaloneLoad() {
+    const std::filesystem::path demoObj =
+        std::filesystem::path(NOTO3D_ASSETS_DIR)
+        / "geometry/placeholders/demo_checker/demo_checker.obj";
+
+    // Safe path: fixture assembles to CPU, cached once, no hard failure.
+    AssetRegistry reg;
+    const auto r1 = reg.loadModelShapesOnly(demoObj, "demo_checker");
+    check(r1.overall != LoadStatus::Failed, "standalone: 0014 fixture assembles (CPU)");
+    check(r1.overall != LoadStatus::Failed, "standalone: overall not Failed");
+    check(reg.uniqueGeometryCount() == 1,
+          "standalone: one canonical standalone geometry cached");
+    check(reg.externalModel() == nullptr,
+          "standalone: externalModel null without GPU upload");
+
+    // Repeated load dedups into a single CPU parse.
+    const auto r2 = reg.loadModelShapesOnly(demoObj, "demo_checker");
+    check(r2.overall != LoadStatus::Failed, "standalone: repeated load succeeds");
+    check(reg.uniqueGeometryCount() == 1,
+          "standalone: repeated load dedups — one CPU parse");
+
+    // Absolute path is fine here — the call site supplies an explicit trusted
+    // location (e.g. NOTO3D_ASSETS_DIR); the path-safety predicate governs
+    // manifest/texture fields, not this API's own argument.
+    AssetRegistry regAbs;
+    const auto okAbs = regAbs.loadModelShapesOnly(demoObj, "explicit_abs");
+    check(okAbs.overall != LoadStatus::Failed,
+          "standalone: explicit absolute path accepted (caller-controlled)");
+
+    // Missing file → Failed, mirroring manifest missing-OBJ semantics.
+    AssetRegistry regMiss;
+    const auto miss = regMiss.loadModelShapesOnly(
+        std::filesystem::path(NOTO3D_ASSETS_DIR) / "geometry/nonexistent.obj", "ghost");
+    check(miss.overall == LoadStatus::Failed, "standalone: missing OBJ → Failed");
+    check(regMiss.externalModel() == nullptr, "standalone: missing OBJ leaves no model");
+
+    // 0013: unsafe diffuseTextureRef in a standalone file → LoadedWithWarnings.
+    TempFile mtl("noto3d_t_sa_mtl.mtl",
+                 "newmtl m\nKd 1 0 0\nmap_Kd ../escape.png\n");
+    TempFile obj("noto3d_t_sa.obj",
+                 "mtllib noto3d_t_sa_mtl.mtl\n"
+                 "v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nvt 0 0\n"
+                 "usemtl m\nf 1/1/1 2/1/1 3/1/1\n");
+    AssetRegistry regTex;
+    const auto wr = regTex.loadModelShapesOnly(obj.path, "unsafe_tex");
+    check(wr.overall == LoadStatus::LoadedWithWarnings,
+          "standalone: '../' texture ref → LOADED_WITH_WARNINGS (0013 predicate)");
 }
 
 }  // namespace
@@ -638,6 +690,7 @@ int main() {
     testCanonicalPathDedup();
     testDemoCheckerFixture();
     testTexturePathSafety();
+    testStandaloneLoad();
 
     if (g_failures == 0) { NOTO3D_INFO("ALL PASS"); return EXIT_SUCCESS; }
     NOTO3D_ERROR("{} FAILURE(S)", g_failures);

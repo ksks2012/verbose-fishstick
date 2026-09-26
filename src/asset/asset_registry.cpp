@@ -196,6 +196,44 @@ CpuObj toCpuObj(const ObjLoadResult& r) {
     return CpuObj{r.status, r.shapes, r.normalWarnings, r.uvWarnings, r.errorMessage};
 }
 
+// Push the parse-recorded diagnostics (errorMessage / normalWarnings / uvWarnings) for a CPU
+// result.  Used identically by manifest loads and standalone loads.
+void appendCpuDiagnostics(std::vector<LoadDiagnostic>& out, const CpuObj& cpu,
+                          const std::string& label) {
+    if (!cpu.errorMessage.empty()) {
+        out.push_back({label, cpu.errorMessage, cpu.status});
+    }
+    if (cpu.normalWarnings > 0) {
+        out.push_back({label,
+            std::to_string(cpu.normalWarnings) +
+                " vertices had missing normals (area-weighted computed)",
+            LoadStatus::LoadedWithWarnings});
+    }
+    if (cpu.uvWarnings > 0) {
+        out.push_back({label,
+            std::to_string(cpu.uvWarnings) + " vertices had missing UVs (defaulted to (0,0))",
+            LoadStatus::LoadedWithWarnings});
+    }
+}
+
+// Ticket 0013: reject diffuseTextureRef paths that violate the ADR-0007 predicate
+// (absolute or '../').  Each rejection is recorded as a warning diagnostic.
+bool scanUnsafeTextureRefs(std::vector<LoadDiagnostic>& out, const CpuObj& cpu,
+                           const std::string& label) {
+    bool hasUnsafe = false;
+    for (const auto& shape : cpu.shapes) {
+        if (shape.material.diffuseTextureRef &&
+            isUnsafePath(*shape.material.diffuseTextureRef)) {
+            out.push_back({label,
+                "texture ref '" + *shape.material.diffuseTextureRef +
+                    "' rejected: absolute paths and '../' not allowed (ADR-0007)",
+                LoadStatus::LoadedWithWarnings});
+            hasUnsafe = true;
+        }
+    }
+    return hasUnsafe;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -228,6 +266,10 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
     m_cpuCache.clear();
     m_modelCache.clear();
     m_textureCache.clear();
+    m_externalCpu.reset();
+    m_externalObjDir.clear();
+    m_externalCanonKey.clear();
+    m_externalModel.reset();
     m_manifestPath = manifestPath;
     m_lastMode     = mode;
 
@@ -283,21 +325,11 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
         }
 
         // CPU load with dedup by canonical path — shared, immutable, parsed once.
-        auto loadCpu = [&](const std::filesystem::path& p) -> std::shared_ptr<const CpuObj> {
-            const std::string key = p.string();
-            const auto hit = m_cpuCache.find(key);
-            if (hit != m_cpuCache.end()) return hit->second;
-            auto cpu = std::make_shared<const CpuObj>(
-                toCpuObj(loadObjShapes(p, entry.id, entry.upAxis)));
-            if (cpu->status != LoadStatus::Failed) m_cpuCache.emplace(key, cpu);
-            return cpu;
-        };
-
-        auto       cpu     = loadCpu(canonPath);
+        auto       cpu      = loadCpuRecord(canonPath, entry.id, entry.upAxis);
         std::string loadKey = canonKey;
         if (cpu->status == LoadStatus::Failed && fallbackPath &&
             fallbackPath->string() != canonKey) {
-            const auto fb = loadCpu(*fallbackPath);
+            const auto fb = loadCpuRecord(*fallbackPath, entry.id, entry.upAxis);
             if (fb->status != LoadStatus::Failed) {
                 loadKey = fallbackPath->string();
                 cpu     = fb;
@@ -308,21 +340,7 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
             // fallback also failed → primary failure stands (diagnosed below)
         }
 
-        if (!cpu->errorMessage.empty()) {
-            m_diagnostics.push_back({entry.id, cpu->errorMessage, cpu->status});
-        }
-        if (cpu->normalWarnings > 0) {
-            m_diagnostics.push_back({entry.id,
-                std::to_string(cpu->normalWarnings) +
-                    " vertices had missing normals (area-weighted computed)",
-                LoadStatus::LoadedWithWarnings});
-        }
-        if (cpu->uvWarnings > 0) {
-            m_diagnostics.push_back({entry.id,
-                std::to_string(cpu->uvWarnings) +
-                    " vertices had missing UVs (defaulted to (0,0))",
-                LoadStatus::LoadedWithWarnings});
-        }
+        appendCpuDiagnostics(m_diagnostics, *cpu, entry.id);
 
         if (cpu->status == LoadStatus::Failed) {
             rec.status = LoadStatus::Failed;
@@ -342,17 +360,7 @@ RegistryResult AssetRegistry::doLoad(const std::filesystem::path& manifestPath, 
         // same ADR-0007 predicate applied to manifest geometry paths.  An unsafe
         // ref (absolute or '../') promotes the asset to LOADED_WITH_WARNINGS;
         // the geometry is still uploaded, but the texture is skipped.
-        bool hasUnsafeTexRef = false;
-        for (const auto& shape : cpu->shapes) {
-            if (shape.material.diffuseTextureRef &&
-                isUnsafePath(*shape.material.diffuseTextureRef)) {
-                m_diagnostics.push_back({entry.id,
-                    "texture ref '" + *shape.material.diffuseTextureRef +
-                        "' rejected: absolute paths and '../' not allowed (ADR-0007)",
-                    LoadStatus::LoadedWithWarnings});
-                hasUnsafeTexRef = true;
-            }
-        }
+        const bool hasUnsafeTexRef = scanUnsafeTextureRefs(m_diagnostics, *cpu, entry.id);
 
         const LoadStatus baseStatus = hasUnsafeTexRef
             ? LoadStatus::LoadedWithWarnings
@@ -418,6 +426,122 @@ RegistryResult AssetRegistry::buildResult() const {
     else                  r.overall = LoadStatus::Success;
 
     return r;
+}
+
+std::shared_ptr<const CpuObj> AssetRegistry::loadCpuRecord(const std::filesystem::path& path,
+                                                           const std::string&           label,
+                                                           const std::string&           upAxis) {
+    const std::string key = path.string();
+    if (const auto hit = m_cpuCache.find(key); hit != m_cpuCache.end()) return hit->second;
+    auto cpu = std::make_shared<const CpuObj>(toCpuObj(loadObjShapes(path, label, upAxis)));
+    if (cpu->status != LoadStatus::Failed) m_cpuCache.emplace(key, cpu);
+    return cpu;
+}
+
+// ---------------------------------------------------------------------------
+// Standalone (manifest-independent) OBJ/MTL loads — ticket 0012 / 0014 fixture
+// ---------------------------------------------------------------------------
+
+RegistryResult AssetRegistry::loadModelShapesOnly(const std::filesystem::path& objPath,
+                                                  std::string_view             label,
+                                                  const std::string&           upAxis) {
+    m_externalCpu.reset();
+    m_externalObjDir.clear();
+    m_externalCanonKey.clear();
+    m_externalModel.reset();
+
+    const std::string labelStr(label);
+    RegistryResult    r;
+
+    // NOTE: no isUnsafePath() filter at this layer — the call site passes an
+    // explicit, trusted OBJ location (e.g. the app's NOTO3D_ASSETS_DIR-derived
+    // demo path), not a manifest-controlled field.  ADR-0007 path safety still
+    // applies where it protects rooted-relative resolution: MTL diffuseTextureRef
+    // refs are checked inside uploadToGpu()/the 0013 scan below (like manifest
+    // loads), never bypassing the predicate.
+
+    std::filesystem::path canonPath;
+    try {
+        canonPath = std::filesystem::weakly_canonical(objPath);
+    } catch (const std::exception& e) {
+        r.overall = LoadStatus::Failed;
+        r.failed  = 1;
+        r.diagnostics.push_back({labelStr,
+            std::string("path resolution error: ") + e.what(), LoadStatus::Failed});
+        m_diagnostics.insert(m_diagnostics.end(), r.diagnostics.begin(), r.diagnostics.end());
+        return r;
+    }
+    const std::string canonKey = canonPath.string();
+    m_externalObjDir            = canonPath.parent_path();
+    m_externalCanonKey          = canonKey;
+
+    // CPU load with the same canonical-path dedup as manifest loads.
+    const auto cpu = loadCpuRecord(canonPath, labelStr, upAxis);
+    m_externalCpu  = cpu;
+
+    appendCpuDiagnostics(r.diagnostics, *cpu, labelStr);
+
+    if (cpu->status == LoadStatus::Failed) {
+        r.overall = LoadStatus::Failed;
+        r.failed  = 1;
+        m_diagnostics.insert(m_diagnostics.end(), r.diagnostics.begin(), r.diagnostics.end());
+        return r;
+    }
+
+    // Defensive: only x/y/z are known axes → no correction + warning (mirrors doLoad).
+    const bool unsupportedAxis =
+        upAxis != "x" && upAxis != "y" && upAxis != "z";
+    if (unsupportedAxis) {
+        r.diagnostics.push_back({labelStr,
+            "unsupported up_axis '" + upAxis + "'; no axis correction applied",
+            LoadStatus::LoadedWithWarnings});
+    }
+
+    // 0013: same diffuseTextureRef predicate applied to CPU data as manifest loads.
+    const bool hasUnsafeTexRef = scanUnsafeTextureRefs(r.diagnostics, *cpu, labelStr);
+
+    // Mirror doLoad()/buildResult(): the tri-state counts record status only, while
+    // overall also accounts for diagnostics (incl. the axis warning above).
+    r.loaded  = cpu->status == LoadStatus::Success && !hasUnsafeTexRef ? 1 : 0;
+    r.warned  = cpu->status == LoadStatus::LoadedWithWarnings || hasUnsafeTexRef ? 1 : 0;
+    r.overall = r.warned || unsupportedAxis ? LoadStatus::LoadedWithWarnings
+                                            : LoadStatus::Success;
+
+    m_diagnostics.insert(m_diagnostics.end(), r.diagnostics.begin(), r.diagnostics.end());
+    return r;
+}
+
+const renderer::Model* AssetRegistry::loadModelFile(const std::filesystem::path& objPath,
+                                                    std::string_view             label,
+                                                    const std::string&           upAxis) {
+    const RegistryResult cpuResult = loadModelShapesOnly(objPath, label, upAxis);
+    if (cpuResult.overall == LoadStatus::Failed || m_externalCpu == nullptr) {
+        return nullptr;
+    }
+
+    if (const auto hit = m_modelCache.find(m_externalCanonKey); hit != m_modelCache.end()) {
+        m_externalModel = hit->second;
+    } else {
+        try {
+            auto model = uploadToGpu(m_externalCpu->shapes,
+                                     m_externalObjDir,
+                                     m_textureCache,
+                                     m_diagnostics,
+                                     std::string(label));
+            m_modelCache.emplace(m_externalCanonKey, model);
+            m_externalModel = std::move(model);
+        } catch (const std::exception& e) {
+            m_diagnostics.push_back({std::string(label),
+                std::string("GPU upload failed: ") + e.what(), LoadStatus::Failed});
+            m_externalModel.reset();
+            return nullptr;
+        }
+    }
+    return m_externalModel.get();
+}
+
+const renderer::Model* AssetRegistry::externalModel() const noexcept {
+    return m_externalModel.get();
 }
 
 const AssetEntry* AssetRegistry::findEntry(std::string_view id) const noexcept {

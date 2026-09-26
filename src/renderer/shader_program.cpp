@@ -84,7 +84,8 @@ ShaderProgram::~ShaderProgram() {
 }
 
 ShaderProgram::ShaderProgram(ShaderProgram&& other) noexcept
-    : m_program(other.m_program) {
+    : m_program(other.m_program),
+      m_uniformCache(std::move(other.m_uniformCache)) {
     other.m_program = 0;
 }
 
@@ -93,6 +94,7 @@ ShaderProgram& ShaderProgram::operator=(ShaderProgram&& other) noexcept {
         release();
         m_program       = other.m_program;
         other.m_program = 0;
+        m_uniformCache  = std::move(other.m_uniformCache);
     }
     return *this;
 }
@@ -101,20 +103,30 @@ void ShaderProgram::use() const noexcept {
     glUseProgram(m_program);
 }
 
+GLint ShaderProgram::uniformLocation(const char* name) const {
+    const std::string key(name);
+    if (const auto hit = m_uniformCache.find(key); hit != m_uniformCache.end()) {
+        return hit->second;
+    }
+    const GLint loc = glGetUniformLocation(m_program, name);
+    m_uniformCache.emplace(key, loc);
+    return loc;
+}
+
 void ShaderProgram::setMat4(const char* name, const glm::mat4& v) const {
-    glUniformMatrix4fv(glGetUniformLocation(m_program, name), 1, GL_FALSE, &v[0][0]);
+    glUniformMatrix4fv(uniformLocation(name), 1, GL_FALSE, &v[0][0]);
 }
 
 void ShaderProgram::setVec4(const char* name, const glm::vec4& v) const {
-    glUniform4fv(glGetUniformLocation(m_program, name), 1, &v[0]);
+    glUniform4fv(uniformLocation(name), 1, &v[0]);
 }
 
 void ShaderProgram::setFloat(const char* name, float v) const {
-    glUniform1f(glGetUniformLocation(m_program, name), v);
+    glUniform1f(uniformLocation(name), v);
 }
 
 void ShaderProgram::setInt(const char* name, int v) const {
-    glUniform1i(glGetUniformLocation(m_program, name), v);
+    glUniform1i(uniformLocation(name), v);
 }
 
 void ShaderProgram::release() noexcept {
@@ -122,6 +134,7 @@ void ShaderProgram::release() noexcept {
         glDeleteProgram(m_program);
         m_program = 0;
     }
+    m_uniformCache.clear();
 }
 
 }  // namespace noto3d::renderer

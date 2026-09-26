@@ -51,6 +51,28 @@ public:
     // Repeat the last load() / loadManifestOnly() call.
     [[nodiscard]] RegistryResult reload();
 
+    // ── Standalone (manifest-independent) OBJ/MTL loads ────────────────────
+    // For the editor's demo/reference assets that live outside manifest.json
+    // (e.g. the 0014 demo_checker fixture).  No AssetEntry is created; the
+    // model is exposed via externalModel().  CPU/GPU dedup, ADR-0007 path
+    // safety and the 0013 texture predicate all still apply.
+
+    // Assemble + dedup one OBJ/MTL to CPU only (no GL).  Mirrors
+    // loadManifestOnly()'s safety/warning surface for a single file.
+    [[nodiscard]] RegistryResult loadModelShapesOnly(const std::filesystem::path& objPath,
+                                                     std::string_view             label,
+                                                     const std::string&           upAxis = "y");
+
+    // Full (GL) standalone OBJ/MTL → GPU Model.  Returns null on failure
+    // (diagnostics recorded).  Uses the same texture upload path as manifest
+    // loads; reference_image never applies.
+    [[nodiscard]] const renderer::Model* loadModelFile(const std::filesystem::path& objPath,
+                                                       std::string_view             label,
+                                                       const std::string&           upAxis = "y");
+
+    // GPU model produced by the last loadModelFile(); null until one succeeds.
+    const renderer::Model* externalModel() const noexcept;
+
     // Manifest entry for the given id; null if not found.
     const AssetEntry* findEntry(std::string_view id) const noexcept;
 
@@ -94,8 +116,19 @@ private:
     // Texture path → shared GL texture (Full mode only; reference_image never enters here).
     std::unordered_map<std::string, std::shared_ptr<renderer::Texture>> m_textureCache;
 
+    // Standalone (non-manifest) load state — cleared by doLoad() like the caches.
+    std::shared_ptr<const CpuObj>    m_externalCpu;
+    std::filesystem::path            m_externalObjDir;      // texture base dir
+    std::string                      m_externalCanonKey;    // GPU dedup key
+    std::shared_ptr<renderer::Model> m_externalModel;
+
     RegistryResult doLoad(const std::filesystem::path& manifestPath, Mode mode);
     RegistryResult buildResult() const;
+
+    // Parse + dedup one canonical OBJ path → shared immutable CPU record (ADR-0007).
+    std::shared_ptr<const CpuObj> loadCpuRecord(const std::filesystem::path& path,
+                                                const std::string&           label,
+                                                const std::string&           upAxis);
 };
 
 }  // namespace noto3d::asset

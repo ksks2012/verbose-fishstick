@@ -239,9 +239,10 @@ add_test(NAME renderer-material-contract COMMAND noto3d-material-tests)
 # ---------------------------------------------------------------------------
 add_executable(noto3d-editor src/app/main.cpp)
 target_link_libraries(noto3d-editor PRIVATE
-    glfw glad glm::glm nlohmann_json::nlohmann_json imgui noto3d_renderer)
+    glfw glad glm::glm imgui noto3d_asset)
 target_compile_definitions(noto3d-editor PRIVATE
     NOTO3D_DEBUG_GL=$<BOOL:${NOTO3D_DEBUG_GL}>
-    NOTO3D_SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders")
+    NOTO3D_SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders"
+    NOTO3D_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
 noto3d_set_warnings(noto3d-editor)
 noto3d_apply_sanitizers(noto3d-editor)

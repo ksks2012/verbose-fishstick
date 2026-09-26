@@ -33,30 +33,36 @@ Contract constraints:
 registry itself is not yet consumed by the app — wire the registry here (which also closes
 0009's manual E2E demo-verification gate).
 
-**Status:** in-progress — `renderer::Renderer` committed (`21a9579`); remaining: main.cpp slim-down
-(⑦⑧⑨ + inline cube fixture) and registry integration (closes 0009 E2E)
+**Status:** completed
 
 - [x] `noto3d::renderer::Renderer` in `src/renderer/`; `Begin3DPass()` sets full ADR-0005 state block
 - [x] `End3DPass()` terminates pass (no GL state restore at M1)
 - [x] `submit()` (or equivalent) handles `cullEnabled` per draw, clears `TODO(0007)` workaround
-- [ ] `main.cpp` reduced to window/context lifecycle + calls into Renderer; no inline GL state
-- [ ] All existing tests green; `noto3d-editor --frames=5` still prints `M1_OK`/`M1_DONE`
+- [x] `main.cpp` reduced to window/context lifecycle + calls into Renderer; no inline GL state
+- [x] All existing tests green; `noto3d-editor --frames=5` still prints `M1_OK`/`M1_DONE`
 - [x] ADR-0005 ImGui limitation documented in code comment (M5 responsibility)
 
 **Folds in ticket 0011 (M1 code-quality deferred findings):**
-- [ ] ⑦ `NOTO3D_SHADER_DIR` fallback cwd dependency → replace `#ifndef` default with
-      `#error "NOTO3D_SHADER_DIR must be defined by the build system"` (main.cpp:20 still has the
-      `./shaders` fallback)
-- [ ] ⑧ `std::optional<ShaderProgram>/<Mesh>` wrappers disappear (Renderer encapsulates setup);
-      verified no leftover `operator->` ceremony in the render loop (main.cpp:173-214 still wraps)
-- [ ] ⑨ `--frames=abc` silent 0 (false-green) → `std::stoi` + validation; non-numeric/negative
-      prints an error and exits non-zero (main.cpp:231-232 still `std::atoi`)
-- [ ] ⑩ uniform-location caching in `ShaderProgram` (lazy `std::unordered_map<std::string_view,
-      GLint>`), first query stores, later frames reuse — fold in here or track as a separate
-      follow-up (shader_program.cpp:105-117 still `glGetUniformLocation` per call)
+- [x] ⑦ `NOTO3D_SHADER_DIR` fallback cwd dependency → replaced with
+      `#error "NOTO3D_SHADER_DIR must be defined by the build system"` (CMake defines it)
+- [x] ⑧ `std::optional<ShaderProgram>/<Mesh>` wrappers disappear (Renderer encapsulates setup);
+      inline `kCubeVerts`/`kCubeIdx` fixture removed entirely; render loop submits registry
+      models with no `operator->` ceremony
+- [x] ⑨ `--frames=abc` silent 0 (false-green) → `std::stoi` + full-token validation;
+      non-numeric/negative prints an error and exits non-zero (verified exit=1)
+- [x] ⑩ uniform-location caching in `ShaderProgram` (`std::unordered_map<std::string,
+      GLint>`, lazy per-location cache; first query calls GL, later frames reuse)
 
-**Registry integration (deferred sub-scope):** wire `AssetRegistry` into the app so
-`noto3d-editor` renders manifest assets; this also closes 0009's manual E2E demo-verification gate.
+**Registry integration (deferred sub-scope) — done:**
+- `noto3d-editor` loads `assets/manifest.json` via `AssetRegistry`, renders the selected
+  manifest asset (default first renderable; `--asset=<id>` overrides) and optionally the
+  0014 demo fixture (`--demo`) through the new standalone path
+  (`loadModelShapesOnly`/`loadModelFile`/`externalModel`).
+- This **closes 0009's manual E2E demo-verification gate**: `--demo --frames=N` uploads the
+  `demo_checker.png` as `GL_SRGB8_ALPHA8`, wires `diffuseTextureRef → texture` and prints
+  `M2_OK ... with diffuse texture (0009 E2E)` (verified dev + release).
+- `--asset=`/`--demo` CLI; GL-owning objects scoped so they are destroyed while the context
+  is current (fixes teardown-after-`glfwTerminate` GL deletion, caught by ASan).
 
 **Points to ADR:** 0005 (renderer state contract), 0008 (module boundaries: src/app vs src/renderer)
 **Supersedes / closes:** ticket 0007 **and folds in ticket 0011**
