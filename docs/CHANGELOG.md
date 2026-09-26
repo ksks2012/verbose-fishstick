@@ -1,8 +1,32 @@
 # CHANGELOG
 
-## [Unreleased] — M0 / M0.5 (complete); M1 not started
-- Grilling session Q1–Q8 closed; foundation decision tree complete (ADR-0001..0008).
-- Repository initialized on `main`; Q1–Q8 recorded as ADRs; CONTEXT.md established.
+## [Unreleased] — M1 + M2 (M1 done, M2 core done; 0009 E2E / 0012 / 0010 remain)
+
+### M2 — asset pipeline (core complete; tickets archived except 0009/0010/open 0012 items)
+- 0008 AssetRegistry: manifest.json v1 authoritative load, OBJ/MTL→SubMesh (material grouping,
+  up-axis baking, canonical paths, CPU dedup), explicit `fallback_geometry` opt-in, tri-state
+  SUCCESS / LOADED_WITH_WARNINGS / FAILED, explicit reload().
+- 0009 sRGB diffuse texture core: `renderer::Texture::fromFile` (GL_SRGB8_ALPHA8, mipmap/filter
+  policy), `uHasTexture` branch (`finalAlpha = effectiveAlpha * sampledAlpha`), registry
+  `diffuseTextureRef → Texture` wiring, `GL_SRGB8_ALPHA8` compile-time pin. Manual E2E demo
+  render remains (pending app→registry wiring).
+- 0013 texture path safety: shared `isUnsafePath()` predicate reused from manifest paths for
+  `diffuseTextureRef`; rejected texture refs promote the asset to `LOADED_WITH_WARNINGS`.
+- 0014 demo texture fixture: `assets/geometry/placeholders/demo_checker/` subtree + deterministic
+  `assets/tools/generate_demo_texture.py` (stdlib-only PNG writer, byte-identical across runs);
+  `map_Kd` relative / no `../`; manifest v1 unchanged.
+
+### M1 — minimal renderer (0005–0007/0012; complete)
+- 0005 `renderer::Mesh` GPU upload (interleaved VBO+EBO+VAO, 32B vertex, immutable, RAII).
+- 0006 Model/SubMesh/Material types + GLSL 330 base shaders + first visible cube draw;
+  `effectiveAlpha = baseColor.a * opacity` with headless test.
+- 0007 pass hygiene, delivered as 0012's `renderer::Renderer` (Begin3DPass/End3DPass/submit;
+  states once per pass, linear clear, cullEnabled per draw). 0011 deferred findings folded into
+  0012 (⑦⑧⑨ still open in main.cpp; ⑩ uniform-location caching open).
+
+### M0 / M0.5 (complete)
+- M0: build & environment baseline (tickets 0001–0004); green presets; M0_OK/M0_FAIL markers.
+- M0.5: asset contract spike — manifest v1, placeholder OBJs, 6 pinned Noto reference PNGs.
 
 ### M0 — build & environment (execution complete)
 - Execution tickets 0002–0004 closed (Q9 prerequisites / dependency build / M0_OK verification);

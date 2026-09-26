@@ -1,8 +1,12 @@
 # 0011 — M1 code-quality deferred findings
 
 **Source:** Code review of tickets 0005/0006 (Sep 2026)
-**Status:** ready-for-agent
-**Blocked by:** 0007 (items ⑦ and ⑧ are naturally resolved when 0007 restructures main.cpp)
+**Status:** folded into 0012 — resolved as part of the 0012 app/renderer separation
+**Blocked by:** 0012
+
+> **Disposition:** ⑦⑧⑨ are resolved inside 0012's main.cpp restructure (each is a natural
+> consequence of that change); ⑩ is a renderer-layer optimization, folded into 0012's renderer
+> work or handled as a separate follow-up. This ticket is not executed independently.
 
 ---
 

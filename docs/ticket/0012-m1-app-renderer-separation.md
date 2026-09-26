@@ -29,16 +29,34 @@ Contract constraints:
 - No snapshot/restore machinery at M1.
 - Existing `TODO(0007)` cull-state per-draw workaround in `main.cpp` is removed.
 
-**Blocked by:** 0007 (supersedes it), 0009
+**Blocked by:** 0007 (supersedes it). 0009 is unblocked for 0012: core is committed; the asset
+registry itself is not yet consumed by the app — wire the registry here (which also closes
+0009's manual E2E demo-verification gate).
 
-**Status:** ready-for-agent
+**Status:** in-progress — `renderer::Renderer` committed (`21a9579`); remaining: main.cpp slim-down
+(⑦⑧⑨ + inline cube fixture) and registry integration (closes 0009 E2E)
 
-- [ ] `noto3d::renderer::Renderer` in `src/renderer/`; `Begin3DPass()` sets full ADR-0005 state block
-- [ ] `End3DPass()` terminates pass (no GL state restore at M1)
-- [ ] `submit()` (or equivalent) handles `cullEnabled` per draw, clears `TODO(0007)` workaround
+- [x] `noto3d::renderer::Renderer` in `src/renderer/`; `Begin3DPass()` sets full ADR-0005 state block
+- [x] `End3DPass()` terminates pass (no GL state restore at M1)
+- [x] `submit()` (or equivalent) handles `cullEnabled` per draw, clears `TODO(0007)` workaround
 - [ ] `main.cpp` reduced to window/context lifecycle + calls into Renderer; no inline GL state
 - [ ] All existing tests green; `noto3d-editor --frames=5` still prints `M1_OK`/`M1_DONE`
-- [ ] ADR-0005 ImGui limitation documented in code comment (M5 responsibility)
+- [x] ADR-0005 ImGui limitation documented in code comment (M5 responsibility)
+
+**Folds in ticket 0011 (M1 code-quality deferred findings):**
+- [ ] ⑦ `NOTO3D_SHADER_DIR` fallback cwd dependency → replace `#ifndef` default with
+      `#error "NOTO3D_SHADER_DIR must be defined by the build system"` (main.cpp:20 still has the
+      `./shaders` fallback)
+- [ ] ⑧ `std::optional<ShaderProgram>/<Mesh>` wrappers disappear (Renderer encapsulates setup);
+      verified no leftover `operator->` ceremony in the render loop (main.cpp:173-214 still wraps)
+- [ ] ⑨ `--frames=abc` silent 0 (false-green) → `std::stoi` + validation; non-numeric/negative
+      prints an error and exits non-zero (main.cpp:231-232 still `std::atoi`)
+- [ ] ⑩ uniform-location caching in `ShaderProgram` (lazy `std::unordered_map<std::string_view,
+      GLint>`), first query stores, later frames reuse — fold in here or track as a separate
+      follow-up (shader_program.cpp:105-117 still `glGetUniformLocation` per call)
+
+**Registry integration (deferred sub-scope):** wire `AssetRegistry` into the app so
+`noto3d-editor` renders manifest assets; this also closes 0009's manual E2E demo-verification gate.
 
 **Points to ADR:** 0005 (renderer state contract), 0008 (module boundaries: src/app vs src/renderer)
-**Supersedes / closes:** ticket 0007
+**Supersedes / closes:** ticket 0007 **and folds in ticket 0011**

@@ -12,12 +12,19 @@ Document hierarchy:
 C++/OpenGL editor MVP for Noto 3D-style emoji composition ("emoji_editor").
 
 ## Current milestone
-M2 Asset Pipeline in progress. M0 (Environment/build) + M0.5 (Asset contract spike) and M1
-Minimal Renderer are complete, M2 chain 0008 → 0014 → 0009 → 0013 fully implemented (0014 and
-0013 completed; 0009 core committed, pending manual E2E demo render once the editor consumes the
-registry). Next executable: 0012 app/renderer separation / registry integration.
-M0 scope, user stories and acceptance matrix: `docs/ticket/0001-build-environment-spec.md`
+M2 Asset Pipeline in progress. M0 (Environment/build), M0.5 (Asset contract spike), and M1
+(minimal renderer + pass hygiene) are complete; M2 chain 0008 → 0014 → 0009 → 0013 implemented
+and verified (0008/0013/0014 completed; 0009 core committed, remains in-progress). Completed
+tickets are archived at `docs/archive/ticket/`. Remaining active work:
+- **0012 (in-progress)**: `renderer::Renderer` committed (`21a9579`); finish the main.cpp
+  slim-down (0011 ⑦⑧⑨ + inline cube fixture) and wire `AssetRegistry` into the app — this also
+  closes 0009's manual E2E demo gate.
+- **0009 (in-progress)**: manual E2E demo render of the 0014 fixture — pending 0012's registry
+  integration.
+- **0010 (ready-for-agent)**: pin deps to commit SHA + URL_HASH (ADR-0003 watch item).
+M0 scope, user stories and acceptance matrix: `docs/archive/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
+Project overview / build / test quickstart: repo-root `README.md`.
 
 ## Roadmap (post-grilling, locked)
 M0 → M0.5 → M1 Minimal Renderer → M2 Asset Pipeline → M3 Noto Vertical Slice → M4 Scene →
@@ -72,26 +79,23 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
 - [ ] Replace GIT_TAG pins with commit SHA (+ URL_HASH) once dev build is stable
       (authored as ticket 0010).
 
-## Post-M0 execution tickets (docs/ticket/)
-- 0005–0006 M1 minimal renderer (committed): 0005 mesh GPU upload → 0006 Model/Material/shader +
-  first draw (cube)
-- 0007 M1 pass hygiene — **superseded by 0012** (extract `renderer::Renderer` + Begin3DPass)
-- 0011 M1 code-quality deferred findings — folds into the 0012 main.cpp restructure (⑦⑧⑨) and
-  renderer work (⑩); blocked by 0012
-- 0012 M1 app/renderer separation (supersedes 0007): `renderer::Renderer` + slim main.cpp;
-  blocked by 0009
-- 0008–0014–0009 M2 asset pipeline (linear chain, implemented): 0008 AssetRegistry + OBJ/MTL→Mesh →
-  0014 demo fixture subtree (`assets/geometry/placeholders/demo_checker/` with
-  `textures/demo_checker.png`, deterministic generator `assets/tools/generate_demo_texture.py`,
-  manifest v1 unchanged, `map_Kd` relative no `../`; **completed**) → 0009 sRGB diffuse texture
-  pipeline consuming the fixture (GL_SRGB8_ALPHA8; finalAlpha = effectiveAlpha * sampledAlpha;
-  uHasTexture branch; core committed `6225dac` + staged static_assert/shader refinement;
-  **in-progress — manual E2E demo render pending editor→registry wiring**). Fixture ownership:
-  0014 builds, 0009 consumes.
-- 0013 M2 texture path safety (**completed**): shared `isUnsafePath()` predicate enforced for
-  manifest geometry / fallback_geometry / diffuseTextureRef; rejected diffuseTextureRef →
-  LOADED_WITH_WARNINGS; not a prerequisite of 0014
-- 0010 dependency pinning hardening (ADR-0003 watch item; blocked by M0, parallel track)
+## Post-M0 execution tickets (docs/ticket/ — active; completed/superseded moved to docs/archive/ticket/)
+- 0012 M1 app/renderer separation + registry integration (in-progress): supersedes 0007, folds in
+  0011 (⑦⑧⑨ + ⑩). `renderer::Renderer` (Begin3DPass/End3DPass/submit) committed `21a9579`;
+  remaining = main.cpp slim-down + AssetRegistry wiring (closes 0009 E2E)
+- 0009 M2 sRGB diffuse texture (in-progress): GL_SRGB8_ALPHA8; finalAlpha = effectiveAlpha *
+  sampledAlpha; uHasTexture branch; core committed `6225dac`; manual E2E demo render pending
+  0012's registry integration
+- 0010 dependency pinning hardening (ready-for-agent): ADR-0003 watch item — GIT_TAG → commit
+  SHA + URL_HASH; parallel infra track
+
+### Archived tickets (docs/archive/ticket/)
+- M0: 0001 (spec) + 0002–0004 (execution) — complete
+- M1: 0005 (Mesh GPU upload), 0006 (Model/Material/shader + first draw), 0007 (pass hygiene,
+  superseded by 0012) — complete
+- M2: 0008 (AssetRegistry + OBJ/MTL→Mesh), 0013 (texture path safety), 0014 (demo texture
+  fixture) — complete
+- 0011 (M1 code-quality deferred) — folded into 0012 (not executed independently)
 
 ## Known MVP limitations
 - No transparent-object depth sorting.

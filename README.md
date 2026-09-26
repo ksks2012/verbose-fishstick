@@ -1,0 +1,93 @@
+# noto3d — Noto 3D Emoji Editor (MVP)
+
+C++/OpenGL editor MVP for Noto 3D-style emoji composition. As of the M2 milestone this is an
+engine slice — an asset pipeline plus a minimal windowed renderer — not yet an interactive editor
+(M4/M5).
+
+- **Language / API:** C++20, OpenGL **3.3 Core** / GLSL 330, GLFW 3.4 (X11), GLM, ImGui (M5),
+  nlohmann/json, glad + stb_image (committed under `lib/`)
+- **Docs hierarchy:** `docs/CONTEXT.md` = current implementation truth; `docs/adr/` = decision
+  history; `docs/DEFINITION.md` = project vocabulary; `docs/CHANGELOG.md` = milestone history;
+  `docs/ticket/` = active tickets, `docs/archive/ticket/` = completed.
+
+## Status
+
+| Milestone | Scope | State |
+|---|---|---|
+| **M0** | Build/env baseline (0001–0004) | ✅ complete — green configure/build/verify on dev, dev-clean, release |
+| **M0.5** | Asset contract spike (manifest + placeholders + references) | ✅ complete |
+| **M1** | Minimal renderer (0005–0007) | ✅ complete — Mesh upload, Material/shader/first draw, pass hygiene |
+| **M2** | Asset pipeline (0008–0014) | 🔵 core complete — `AssetRegistry` + OBJ/MTL→Mesh, sRGB diffuse texture pipeline, demo fixture, texture path safety |
+| M3/M4+ | Noto vertical slice / Scene / ImGui editor | ⏳ not started |
+
+### Completed tickets (`docs/archive/ticket/`)
+
+- **M0:** 0001 spec, 0002 Q9 machine prereqs, 0003 dependency build, 0004 M0_OK verification
+- **M1:** 0005 Mesh GPU upload (`renderer::Mesh`, 32B vertex, immutable), 0006
+  Model/SubMesh/Material + GLSL 330 base shaders + first cube draw, 0007 pass hygiene
+  (superseded by 0012; shipped as `renderer::Renderer`)
+- **M2:** 0008 AssetRegistry (manifest v1, OBJ/MTL→SubMesh, dedup, fallback_geometry, tri-state
+  SUCCESS/LOADED_WITH_WARNINGS/FAILED), 0013 texture path safety (shared `isUnsafePath()`
+  predicate), 0014 demo texture fixture (deterministic `generate_demo_texture.py`,
+  `demo_checker` subtree)
+- **0011** M1 code-quality deferred findings — folded into 0012
+
+### Active tickets (`docs/ticket/`)
+
+- **0012** (in-progress): `renderer::Renderer` committed; finish main.cpp slim-down + wire
+  `AssetRegistry` into the app (closes 0009's E2E demo gate)
+- **0009** (in-progress): sRGB diffuse texture upload core committed; manual E2E demo render
+  pending 0012's registry integration
+- **0010** (ready): dependency pinning GIT_TAG → commit SHA + URL_HASH
+
+## Build & test
+
+Machine prereq (one-time): `sudo apt install libxinerama-dev libxcursor-dev libxi-dev`
+
+```bash
+cmake --preset dev                      # configure (Debug + sanitizer option)
+cmake --build build/dev -j               # build
+ctest --test-dir build/dev               # headless tests (4 suites)
+build/dev/noto3d-editor --frames=5       # non-interactive smoke: prints M0_OK / M1_DONE
+build/dev/noto3d-editor                  # interactive window
+```
+
+Presets: `dev` (Debug + sanitizer/debug-GL options), `dev-clean`, `release`. Our own code builds
+with `-Wall -Wextra -Wpedantic`; `-Werror` is opt-in (ADR-0008).
+
+## Layout
+
+```text
+assets/                 manifest.json (v1, authoritative) + references/ (official PNGs),
+                        geometry/ (placeholder OBJs incl. demo_checker fixture)
+src/                    app/ main.cpp · core/ Log + GL capability · renderer/ Mesh/Model/
+                        Material/ShaderProgram/Texture/Renderer · asset/ AssetRegistry+OBJ/MTL loader
+shaders/                GLSL 330 base.vert / base.frag
+lib/                    pinned deps (glad + stb_image committed; GLFW/GLM/ImGui/json fetched)
+tests/                  dependency-free headless contract tests (asset/renderer/core)
+docs/                   CONTEXT/ADR/DEFINITION/CHANGELOG/ticket + archive
+```
+
+## Renderer key facts (ADR-0005/0006)
+
+- 3D pass state set **once per frame** by `Renderer::Begin3DPass`; `Material::cullEnabled` is the
+  only per-draw variance; no snapshot/restore until M5 ImGui overlay.
+- 32B vertex `pos+normal+uv`, `GL_UNSIGNED_INT` indices, immutable `Mesh` after upload.
+- Straight alpha; linear clear `(0.12, 0.12, 0.14)`; sRGB framebuffer converts on output;
+  diffuse textures allocate `GL_SRGB8_ALPHA8` (hardware sRGB→linear on sample); shader stays
+  linear and never branches on missing vertex data.
+- `finalAlpha = effectiveAlpha * sampledAlpha`; `effectiveAlpha = baseColor.a * opacity`.
+
+## Asset & texture pipeline (ADR-0002/0007)
+
+`manifest.geometry → OBJ → mtllib → MTL → map_Kd → diffuseTextureRef → Texture::fromFile()`.
+Reference PNGs (`assets/references/**`) are metadata-only and never uploaded. Manifest paths and
+MTL `map_Kd` share the same path-safety predicate: relative, no `../`, no absolute; a rejected
+texture ref promotes the asset to `LOADED_WITH_WARNINGS` (geometry still renders with baseColor).
+
+## Next steps
+
+1. **0012**: finish app/renderer separation (folded 0011 ⑦⑧⑨), wire AssetRegistry in →
+   0009 E2E demo render (checker texture on screen = manual close).
+2. **0010**: dependency pinning to commit SHA.
+3. M3 noto vertical slice, M4 scene, M5 ImGui editor.
