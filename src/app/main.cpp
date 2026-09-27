@@ -5,6 +5,7 @@
 #include <GLFW/glfw3.h>
 
 #include <asset_registry.hpp>
+#include <camera.hpp>
 #include <draw_list.hpp>
 #include <gl_capability.hpp>
 #include <log.hpp>
@@ -81,6 +82,11 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.demo = true;
         } else if (std::strcmp(arg, "--list-assets") == 0) {
             out.listAssets = true;
+        } else {
+            // Unknown/unsupported flag: rejection is a CLI contract (ADR-0010 Q8
+            // "invalid flag → exit 1"; ticket 0024 matrix). Never silently ignore.
+            NOTO3D_CRITICAL("unknown option '{}'", arg);
+            return false;
         }
     }
     return true;
@@ -115,6 +121,25 @@ static int listAssetsCommand() {
     }
     NOTO3D_INFO("M3_ASSETS end count={}", static_cast<int>(registry.entries().size()));
     return EXIT_SUCCESS;
+}
+
+// Camera interaction sensitivities (app layer: pixels → world units / radians)
+// Unit conversion is here, never inside Camera (ADR-0010 Q7 / ticket 0023).
+constexpr float kOrbitSens = 0.005f;  // radians/pixel
+constexpr float kPanSens   = 0.003f;  // world-units/pixel
+constexpr float kZoomSens  = 0.5f;    // world-units/scroll-tick
+
+// Per-frame mouse state for camera interaction (no InputManager at M4 — ADR-0010)
+struct InputState {
+    double prevX     = 0.0;
+    double prevY     = 0.0;
+    float  scrollY   = 0.0f;
+    bool   firstMove = true;
+};
+
+void scrollCallback(GLFWwindow* w, double /*xoffset*/, double yoffset) {
+    auto* s = static_cast<InputState*>(glfwGetWindowUserPointer(w));
+    if (s) s->scrollY += static_cast<float>(yoffset);
 }
 
 void glfwErrorCallback(int code, const char* desc) {
@@ -183,6 +208,7 @@ static int run(const Options& opts) {
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);  // DPI-safe resize (ADR-0004)
+    glfwSetScrollCallback(window, scrollCallback);  // camera zoom (ticket 0023)
 
     if (gladLoadGL(reinterpret_cast<GLADloadfunc>(glfwGetProcAddress)) == 0) {
         NOTO3D_CRITICAL("M0_FAIL: glad load failed");
@@ -246,10 +272,13 @@ static int run(const Options& opts) {
     int  exitCode = EXIT_SUCCESS;
     int  frames   = 0;
     bool ranLoop  = false;
+    InputState inputState;
+    glfwSetWindowUserPointer(window, &inputState);
     {
         noto3d::renderer::ShaderProgram baseShader;
         noto3d::asset::AssetRegistry    registry;
         noto3d::renderer::Renderer      renderer;
+        noto3d::renderer::Camera        camera;   // ticket 0023
 
         auto fail = [&](const char* msg) {
             NOTO3D_CRITICAL("{}", msg);
@@ -383,16 +412,39 @@ static int run(const Options& opts) {
                         glfwSetWindowShouldClose(window, GLFW_TRUE);
                     }
 
-                    // Compute view + projection (camera in 0023; constants held here)
+                    // Camera input (LMB=orbit, MMB=pan, wheel=zoom; ticket 0023)
+                    {
+                        double curX, curY;
+                        glfwGetCursorPos(window, &curX, &curY);
+                        if (inputState.firstMove) {
+                            inputState.prevX     = curX;
+                            inputState.prevY     = curY;
+                            inputState.firstMove = false;
+                        }
+                        const float dx = static_cast<float>(curX - inputState.prevX);
+                        const float dy = static_cast<float>(curY - inputState.prevY);
+                        inputState.prevX = curX;
+                        inputState.prevY = curY;
+
+                        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+                            camera.orbit(dx * kOrbitSens, -dy * kOrbitSens);
+                        }
+                        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
+                            camera.pan(dx * kPanSens, -dy * kPanSens);
+                        }
+                        if (inputState.scrollY != 0.0f) {
+                            camera.zoom(inputState.scrollY * kZoomSens);
+                            inputState.scrollY = 0.0f;
+                        }
+                    }
+
+                    // Compute view + projection from Camera (ADR-0010 Q7)
                     int fbW = 0, fbH = 0;
                     glfwGetFramebufferSize(window, &fbW, &fbH);
                     const float aspect = (fbH > 0)
                         ? static_cast<float>(fbW) / static_cast<float>(fbH) : 1.0f;
-                    const auto proj = glm::perspective(glm::radians(45.0f),
-                                                       aspect, 0.1f, 100.0f);
-                    const auto view = glm::lookAt(glm::vec3(0.0f, 0.5f, 3.0f),
-                                                  glm::vec3(0.0f, 0.0f, 0.0f),
-                                                  glm::vec3(0.0f, 1.0f, 0.0f));
+                    const auto proj = camera.projectionMatrix(aspect);
+                    const auto view = camera.viewMatrix();
 
                     renderer.Begin3DPass();
                     // All draws go through collectDrawItems — no bypass (ADR-0010 Q6)

@@ -220,6 +220,7 @@ add_test(NAME asset-manifest-integrity COMMAND noto3d-manifest-tests)
 # Renderer library (ADR-0006)
 # ---------------------------------------------------------------------------
 add_library(noto3d_renderer STATIC
+    src/renderer/camera.cpp
     src/renderer/mesh.cpp
     src/renderer/renderer.cpp
     src/renderer/shader_program.cpp
@@ -243,6 +244,12 @@ target_link_libraries(noto3d-material-tests PRIVATE noto3d_renderer)
 noto3d_set_warnings(noto3d-material-tests)
 noto3d_apply_sanitizers(noto3d-material-tests)
 add_test(NAME renderer-material-contract COMMAND noto3d-material-tests)
+
+add_executable(noto3d-camera-tests tests/renderer/camera_test.cpp)
+target_link_libraries(noto3d-camera-tests PRIVATE noto3d_renderer)
+noto3d_set_warnings(noto3d-camera-tests)
+noto3d_apply_sanitizers(noto3d-camera-tests)
+add_test(NAME renderer-camera-math COMMAND noto3d-camera-tests)
 
 # ---------------------------------------------------------------------------
 # Scene library (ADR-0010 Q1–Q4) — pure data, glm only; never links asset/renderer
