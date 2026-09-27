@@ -28,10 +28,17 @@
   verified for all three entry modes (`m4_vertical_scene`=3 / `<id>`=1 / `--demo`=1 `demo_checker`
   + `M2_OK (0009 E2E)`); `xprop` titles verified on X11. Manual smoke (layout + orbit/zoom/pan +
   ESC) user-confirmed; no readback/similarity introduced. CONTEXT updated in the same change.
-- 0025 (code cleanup from review of 0021–0024): opened, `ready-for-agent`, independent of M5 —
-  ① CLI option parsing → `src/app/cli_options` (+ headless parse tests), ② uniform-location cache,
-  ③ `loadManifestOnly()` API, ④ scene-scope flattening, ⑤ `noto3d_asset` PUBLIC GL coupling (M5+),
-  ⑥⑦ M5-era concerns (defer).
+- 0025 (code cleanup from review of 0021–0024, narrowed by a strict re-review) — opened,
+  `ready-for-agent`, independent of M5: ① CLI option parsing → `src/app/cli_options` + headless
+  `Options`-content tests (P1), ④ flatten `run()`'s GL scope into `renderScene()` (P2), ② verify
+  the existing uniform-location cache (verification-only), ③ audit the `loadManifestOnly()` seam
+  without removing or `#ifdef`-gating it (production `--list-assets`, 0017), ⑤ asset→renderer
+  PUBLIC GL coupling recorded as deferred, ⑧ record the CMake target graph. No public-API removal,
+  no test-only build conditionals, no library splits, no M5 feature design pulled into M4.
+- 0026 (M5 input & interaction config follow-ups) and 0027 (asset CPU/GPU boundary architecture
+  spike) — opened, deferred; split out of 0025 so the cleanup ticket stays free of M5 design.
+  0025 carries a top-level invariant: no externally observable M4 behaviour or established
+  architecture contract changes under the cleanup.
 
 ## [Unreleased] — M3 Noto vertical slice (complete)
 

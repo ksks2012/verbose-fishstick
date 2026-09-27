@@ -13,7 +13,7 @@ C++/OpenGL editor MVP for Noto 3D-style emoji composition ("emoji_editor").
 
 ## Current milestone
 M4 Scene Composition & Transform **complete** (0020–0024, archived; 0025 code-cleanup pass
-`ready-for-agent`, independent of M5). M0 (Environment/build),
+`ready-for-agent` and 0026/0027 follow-ups deferred — all independent of M5). M0 (Environment/build),
 M0.5 (Asset contract spike), M1 (minimal renderer + pass hygiene), M2 (0008 → 0014 → 0009 → 0013 +
 0012/0011/0010) and M3 (0015 → 0016 → 0017 → 0018) are done and verified. Completed tickets are
 archived at `docs/archive/ticket/` (all 24). Working tree state:
@@ -163,10 +163,23 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   + `M4_INFO`/`M2_OK` logs green dev+release, ctest 8/8; xprop titles + user-confirmed smoke)
 
 ### M4 (post-close cleanup; in docs/ticket/)
-- 0025 (code cleanup from review of 0021–0024) — `ready-for-agent`, no blocker, independent of M5:
-  ① CLI parsing → `src/app/cli_options` + headless parse tests, ② ShaderProgram uniform-location
-  cache, ③ `loadManifestOnly()` API placement, ④ main.cpp scene-scope flattening, ⑤ noto3d_asset
-  PUBLIC GL coupling (defer M5+), ⑥⑦ M5-era concerns (defer)
+- 0025 (M4 code cleanup, narrowed after strict re-review) — `ready-for-agent`, no blocker,
+  independent of M5, under a top-level invariant that no externally observable M4 behaviour or
+  established architecture contract may change: ① extract CLI parsing → `src/app/cli_options` + headless `Options`-content
+  tests (P1), ④ flatten `run()`'s GL scope into `renderScene()` (P2), ② verify the existing
+  uniform-location cache (verification-only), ③ audit the `loadManifestOnly()` seam without
+  removing/`#ifdef`-gating it (it backs production `--list-assets`, 0017), ⑤ record the
+  asset→renderer PUBLIC GL coupling as deferred, ⑧ record the actual CMake target graph. Explicitly
+  does **not** remove public APIs, add test-only build conditionals, split libraries, or pre-design
+  M5 features
+- 0026 (M5 input & interaction config follow-ups) — deferred to M5: cursor-baseline reset semantics
+  (firstMove is cursor-ownership, not scene lifecycle) + camera interaction sensitivity config
+  owned by the app/input layer — **not** `renderer::Camera` (ADR-0010 Q7 purity preserved)
+- 0027 (asset CPU/GPU boundary architecture spike) — deferred; output = investigation → proposed
+  boundary → ADR/amendment → implementation tickets. Covers type ownership, CPU/GPU resource
+  ownership and lifetimes, library shape, `loadManifestOnly()`/`loadModelFile()` consequences —
+  and must preserve the M4 contracts (AssetRegistry authority, Scene pure data, app-layer
+  `collectDrawItems` seam, borrowed `DrawItem::model`)
 
 ## Known MVP limitations
 - No transparent-object depth sorting.
