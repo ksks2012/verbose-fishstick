@@ -285,7 +285,7 @@ add_test(NAME app-draw-list-seam COMMAND noto3d-app-tests)
 # ---------------------------------------------------------------------------
 add_executable(noto3d-editor src/app/main.cpp)
 target_link_libraries(noto3d-editor PRIVATE
-    glfw glad glm::glm imgui noto3d_asset)
+    glfw glad glm::glm imgui noto3d_app noto3d_asset)
 target_compile_definitions(noto3d-editor PRIVATE
     NOTO3D_DEBUG_GL=$<BOOL:${NOTO3D_DEBUG_GL}>
     NOTO3D_SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders"

@@ -5,9 +5,11 @@
 #include <GLFW/glfw3.h>
 
 #include <asset_registry.hpp>
+#include <draw_list.hpp>
 #include <gl_capability.hpp>
 #include <log.hpp>
 #include <renderer.hpp>
+#include <scene.hpp>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -274,76 +276,102 @@ static int run(const Options& opts) {
             NOTO3D_INFO("M2_INFO  manifest loaded: {} ok, {} warned, {} failed",
                         loadR.loaded, loadR.warned, loadR.failed);
 
-            // Select the asset to render: explicit id wins, else first renderable.
-            // A — every selection (default or --asset=) prints the SAME identity
-            // line; reference_image stays metadata-only (ADR-0002).
-            const noto3d::renderer::Model* sceneModel = nullptr;
-            const noto3d::asset::AssetEntry* selectedEntry = nullptr;
-            if (opts.assetId) {
-                const noto3d::asset::AssetEntry* entry = registry.findEntry(*opts.assetId);
-                if (!entry) {
-                    ok = fail(("M2_FAIL: unknown asset '" + *opts.assetId + "'").c_str());
-                } else {
-                    selectedEntry = entry;
-                    NOTO3D_INFO("M3_INFO  selected asset '{}' geometry={} reference={}",
-                                entry->id, geometrySourceName(*entry), referenceName(*entry));
-                    sceneModel = registry.model(entry->id);
-                    if (!sceneModel) {
-                        NOTO3D_WARN("M2_WARN  asset '{}' has no GPU geometry "
-                                    "(geometry-less or failed)", entry->id);
-                    }
-                }
-            } else {
-                for (const auto& e : registry.entries()) {
-                    if (const auto* m = registry.model(e.id)) {
-                        selectedEntry = &e;
-                        NOTO3D_INFO("M3_INFO  selected asset '{}' geometry={} reference={}",
-                                    e.id, geometrySourceName(e), referenceName(e));
-                        sceneModel = m;
-                        break;
-                    }
-                }
-                if (!sceneModel) {
-                    NOTO3D_WARN("M2_WARN  no manifest asset is renderable; using demo only");
-                }
-            }
+            // ---- M4 — Scene construction (ADR-0010 Q5/Q6) -------------------------
+            // Build a Scene for the selected entry mode; every render path goes through
+            // collectDrawItems() — no direct submit bypass (ticket 0022).
+            // --asset and --demo are mutually exclusive (ticket 0022 CLI contract).
+            noto3d::scene::Scene      scene;
+            std::string               sceneName;
+            noto3d::app::Resolver     resolver;
 
-            // --demo: render the 0014 fixture through the registry's standalone path.
-            // Closes 0009's E2E gate: diffuseTextureRef → Texture::fromFile → render.
-            const noto3d::renderer::Model* demoModel = nullptr;
-            if (opts.demo) {
-                demoModel = registry.loadModelFile(
-                    std::string(NOTO3D_ASSETS_DIR) +
-                        "/geometry/placeholders/demo_checker/demo_checker.obj",
-                    "demo_checker");
-                bool textured = false;
-                if (demoModel) {
-                    for (const auto& sm : *demoModel) {
+            if (opts.assetId && opts.demo) {
+                ok = fail("M4_FAIL: --asset and --demo are mutually exclusive");
+
+            } else if (opts.demo) {
+                // Demo-only Scene: exactly one entity, identity transform (0014 fixture).
+                const noto3d::renderer::Model* demoPtr =
+                    registry.loadModelFile(
+                        std::string(NOTO3D_ASSETS_DIR) +
+                            "/geometry/placeholders/demo_checker/demo_checker.obj",
+                        "demo_checker");
+                if (!demoPtr) {
+                    ok = fail("M2_FAIL: demo fixture failed to load");
+                } else {
+                    bool textured = false;
+                    for (const auto& sm : *demoPtr) {
                         textured = textured || sm.material.texture.has_value();
                     }
+                    if (textured) {
+                        NOTO3D_INFO("M2_OK   demo_checker fixture rendered with diffuse "
+                                    "texture (0009 E2E)");
+                    } else {
+                        NOTO3D_WARN("M2_WARN  demo_checker fixture rendered WITHOUT "
+                                    "a diffuse texture");
+                    }
+                    scene.createEntity("demo_checker", "demo_checker");  // identity transform
+                    sceneName = "demo_checker";
+                    resolver = [demoPtr](const std::string& id) -> const noto3d::renderer::Model* {
+                        return (id == "demo_checker") ? demoPtr : nullptr;
+                    };
                 }
-                if (demoModel && textured) {
-                    NOTO3D_INFO("M2_OK   demo_checker fixture rendered with diffuse "
-                                "texture (0009 E2E)");
-                } else if (demoModel) {
-                    NOTO3D_WARN("M2_WARN  demo_checker fixture rendered WITHOUT a "
-                                "diffuse texture");
+
+            } else if (opts.assetId) {
+                // Single-entity Scene from --asset=<id>; M3 identity line kept.
+                const noto3d::asset::AssetEntry* entry = registry.findEntry(*opts.assetId);
+                if (!entry) {
+                    const std::string msg =
+                        "M2_FAIL: unknown asset '" + *opts.assetId + "'";
+                    ok = fail(msg.c_str());
                 } else {
-                    ok = fail("M2_FAIL: demo fixture failed to load");
+                    NOTO3D_INFO("M3_INFO  selected asset '{}' geometry={} reference={}",
+                                entry->id, geometrySourceName(*entry), referenceName(*entry));
+                    scene.createEntity(entry->id, entry->id);  // identity transform
+                    sceneName = entry->id;
+                    resolver = [&registry](const std::string& id)
+                                   -> const noto3d::renderer::Model* {
+                        return registry.model(id);
+                    };
                 }
+
+            } else {
+                // Default: m4_vertical_scene — 3 entities spread on the X axis.
+                const auto addAt = [&](const std::string& assetId, float x) {
+                    const auto eid = scene.createEntity(assetId, assetId);
+                    if (auto* e = scene.findEntity(eid)) {
+                        e->transform.position = {x, 0.0f, 0.0f};
+                    }
+                };
+                addAt("smile",       -1.5f);
+                addAt("crown",        0.0f);
+                addAt("sunglasses",   1.5f);
+                sceneName = "m4_vertical_scene";
+                resolver = [&registry](const std::string& id)
+                               -> const noto3d::renderer::Model* {
+                    return registry.model(id);
+                };
             }
 
-            // B — dynamic window title reflects the selected asset (ticket 0017):
-            // "<id> [<source>] | noto3d (M3)" via existing GLFW API, no text renderer.
-            std::string title = "noto3d (M3)";
-            if (selectedEntry) {
-                title = selectedEntry->id + " [" + geometrySourceName(*selectedEntry) +
-                        "] | noto3d (M3)";
+            // Structured log — 0024's automated matrix asserts on this line.
+            if (ok) {
+                NOTO3D_INFO("M4_INFO rendering scene '{}' entities={}",
+                            sceneName,
+                            static_cast<int>(scene.entities().size()));
             }
-            glfwSetWindowTitle(window, title.c_str());
 
-            if (ok && !sceneModel && !demoModel) {
-                ok = fail("M2_FAIL: nothing to render");
+            // Window title: single-entity rule or scene name (ADR-0010/ticket 0022)
+            if (ok) {
+                std::string title;
+                if (opts.demo) {
+                    title = "demo_checker [placeholder] | noto3d (M4)";
+                } else if (opts.assetId) {
+                    const auto* entry = registry.findEntry(*opts.assetId);
+                    const std::string src =
+                        entry ? geometrySourceName(*entry) : "unknown";
+                    title = *opts.assetId + " [" + src + "] | noto3d (M4)";
+                } else {
+                    title = sceneName + " | noto3d (M4)";
+                }
+                glfwSetWindowTitle(window, title.c_str());
             }
 
             // ---- Render loop ---------------------------------------------------
@@ -355,25 +383,26 @@ static int run(const Options& opts) {
                         glfwSetWindowShouldClose(window, GLFW_TRUE);
                     }
 
-                    // Compute MVP for this frame
+                    // Compute view + projection (camera in 0023; constants held here)
                     int fbW = 0, fbH = 0;
                     glfwGetFramebufferSize(window, &fbW, &fbH);
                     const float aspect = (fbH > 0)
                         ? static_cast<float>(fbW) / static_cast<float>(fbH) : 1.0f;
-                    const auto proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
+                    const auto proj = glm::perspective(glm::radians(45.0f),
+                                                       aspect, 0.1f, 100.0f);
                     const auto view = glm::lookAt(glm::vec3(0.0f, 0.5f, 3.0f),
                                                   glm::vec3(0.0f, 0.0f, 0.0f),
                                                   glm::vec3(0.0f, 1.0f, 0.0f));
-                    const auto mvp = proj * view;  // model = identity
 
                     renderer.Begin3DPass();
-                    const auto submitModel = [&](const noto3d::renderer::Model& model) {
-                        for (const auto& sm : model) {
+                    // All draws go through collectDrawItems — no bypass (ADR-0010 Q6)
+                    for (const auto& item :
+                             noto3d::app::collectDrawItems(scene, resolver)) {
+                        const glm::mat4 mvp = proj * view * item.modelMatrix;
+                        for (const auto& sm : *item.model) {
                             renderer.submit(sm.mesh, sm.material, baseShader, mvp);
                         }
-                    };
-                    if (sceneModel) submitModel(*sceneModel);
-                    if (demoModel)  submitModel(*demoModel);
+                    }
                     renderer.End3DPass();
 
                     glfwSwapBuffers(window);
