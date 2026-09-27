@@ -72,17 +72,33 @@ public:
 
 ## Acceptance
 
-- [ ] Pure-math `renderer::Camera`, no GL/Scene/GLFW/input-abstraction dependency
-- [ ] Locked spherical convention + initial yaw/pitch/distance ⇒ initial eye exactly `(0,0.5,3)`
-- [ ] Initial view == M3 view (lookAt equality test); radians throughout
-- [ ] orbit sign (yaw grows with dx, pitch grows with dy) / pitch clamp ±89°
-- [ ] zoom sign (+delta = zoom-in) / distance clamp 0.5–20, independent of near/far
-- [ ] pan in world units along camera-local right/up (positive dx/right, dy/up)
-- [ ] GLFW wiring: LMB=orbit, wheel=zoom, MMB=pan, ESC=quit; no Input class introduced
-- [ ] `tests/renderer/camera_test.cpp` green (dev + release), headless
-- [ ] Render loop consumes `camera.projectionMatrix(aspect) * camera.viewMatrix()`
+- [x] Pure-math `renderer::Camera`, no GL/Scene/GLFW/input-abstraction dependency
+- [x] Locked spherical convention + initial yaw/pitch/distance ⇒ initial eye exactly `(0,0.5,3)`
+- [x] Initial view == M3 view (lookAt equality test); radians throughout
+- [x] orbit sign (yaw grows with dx, pitch grows with dy) / pitch clamp ±89°
+- [x] zoom sign (+delta = zoom-in) / distance clamp 0.5–20, independent of near/far
+- [x] pan in world units along camera-local right/up (positive dx/right, dy/up)
+- [x] GLFW wiring: LMB=orbit, wheel=zoom, MMB=pan, ESC=quit; no Input class introduced
+- [x] `tests/renderer/camera_test.cpp` green (dev + release), headless
+- [x] Render loop consumes `camera.projectionMatrix(aspect) * camera.viewMatrix()`
 
 **Blocked by:** 0022 (complete)
-**Status:** pending
+**Status:** completed
+
+> Evidence (2026-09-26/27): `src/renderer/camera.{hpp,cpp}` — pure-math orbit/zoom/pan Camera
+> (glm only; no GL/Scene/GLFW/input abstraction). Locked spherical convention
+> `offset = (cos p·sin y, sin p, cos p·cos y)·distance`; initial `target=(0,0,0)`, `yaw=0`,
+> `distance=sqrt(9.25)`, `pitch=asin(0.5/sqrt(9.25))` ⇒ eye **exactly** `(0,0.5,3)`; `viewMatrix()`
+> equals `glm::lookAt((0,0.5,3),(0,0,0),(0,1,0))`; `projectionMatrix(aspect)` = perspective
+> 45°/0.1/100. orbit: `yaw+=dx, pitch+=dy`, pitch clamped ±89°; zoom:
+> `distance=clamp(distance−delta, 0.5, 20)`; pan: `target += right·dx + up·dy` — camera-local
+> orthonormal basis, world units, only `target` mutated. No mutable-state exposure (const getters
+> only). `tests/renderer/camera_test.cpp` = 13 blocks / 20 checks → `ALL PASS`: initial view
+> equality, initial primitives, projection, orbit signs + ±89° clamp, zoom sign + [0.5,20] clamp,
+> FOV unchanged by zoom, pan keeps yaw/pitch/distance, pan dx → camera-local right (≈ world +X at
+> yaw=0), pan dy → camera-local up (z becomes non-zero ⇒ up ≠ worldUp). CTest
+> `renderer-camera-math`; ctest 8/8 on dev + release. Render loop consumes
+> `camera.projectionMatrix(aspect) * camera.viewMatrix()`; LMB=orbit / wheel=zoom / MMB=pan /
+> ESC=quit wired in `main.cpp`, gesture → radians/units conversion app-side.
 **Points to ADR:** 0010 (Q7) · 0004 (viewport/DPI, framebuffer aspect) · 0005 (pass hygiene)
 **Rolls under spec:** ADR-0010 (M4 spec embedded; execution tickets only in docs/ticket/)

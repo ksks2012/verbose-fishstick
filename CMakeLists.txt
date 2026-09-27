@@ -299,3 +299,46 @@ target_compile_definitions(noto3d-editor PRIVATE
     NOTO3D_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
 noto3d_set_warnings(noto3d-editor)
 noto3d_apply_sanitizers(noto3d-editor)
+
+# ---------------------------------------------------------------------------
+# CLI regression matrix — headless-safe (ticket 0024 / ADR-0010 Q8)
+#
+# Only paths that exit BEFORE creating a GL context are registered here;
+# they require no DISPLAY and run identically in every CI environment.
+#
+# GL-requiring paths (default / --asset=<id> / --demo with valid id) are
+# verified manually per ADR-0008 and the 0021 headless draw-list suite covers
+# the asset-resolution contract.
+# ---------------------------------------------------------------------------
+
+# --list-assets exits before GLFW; verifies the CPU-only manifest path.
+add_test(NAME cli-list-assets
+    COMMAND $<TARGET_FILE:noto3d-editor> --list-assets)
+set_tests_properties(cli-list-assets PROPERTIES
+    PASS_REGULAR_EXPRESSION "M3_ASSETS version=1")
+
+# Unknown flag rejected in parseOptions (pre-GL) → exit 1.
+add_test(NAME cli-invalid-flag
+    COMMAND $<TARGET_FILE:noto3d-editor> --no-such-flag)
+set_tests_properties(cli-invalid-flag PROPERTIES WILL_FAIL TRUE)
+
+# --frames= with a negative value → exit 1.
+add_test(NAME cli-frames-negative
+    COMMAND $<TARGET_FILE:noto3d-editor> --frames=-1)
+set_tests_properties(cli-frames-negative PROPERTIES WILL_FAIL TRUE)
+
+# --frames= with a non-numeric value → exit 1.
+add_test(NAME cli-frames-non-numeric
+    COMMAND $<TARGET_FILE:noto3d-editor> --frames=abc)
+set_tests_properties(cli-frames-non-numeric PROPERTIES WILL_FAIL TRUE)
+
+# --asset= with empty id → exit 1 in parseOptions.
+add_test(NAME cli-asset-empty
+    COMMAND $<TARGET_FILE:noto3d-editor> "--asset=")
+set_tests_properties(cli-asset-empty PROPERTIES WILL_FAIL TRUE)
+
+# --asset + --demo mutually exclusive; check moved to main() before run() →
+# exit 1 without touching GLFW/GL (ticket 0024).
+add_test(NAME cli-asset-demo-exclusive
+    COMMAND $<TARGET_FILE:noto3d-editor> --asset=smile --demo)
+set_tests_properties(cli-asset-demo-exclusive PROPERTIES WILL_FAIL TRUE)

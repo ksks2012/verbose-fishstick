@@ -53,16 +53,29 @@ std::vector<DrawItem> collectDrawItems(const scene::Scene& scene, const Resolver
 
 ## Acceptance
 
-- [ ] `collectDrawItems()` returns per-entity DrawItems; unresolved assetId ⇒ skip, not failure
-- [ ] No deduplication/class/cache; DrawItem holds no ownership and is never stored back
-- [ ] `DrawItem::model` documented as a frame-local borrowed pointer (invalidated by registry
+- [x] `collectDrawItems()` returns per-entity DrawItems; unresolved assetId ⇒ skip, not failure
+- [x] No deduplication/class/cache; DrawItem holds no ownership and is never stored back
+- [x] `DrawItem::model` documented as a frame-local borrowed pointer (invalidated by registry
       reload; fresh draw list each frame)
-- [ ] Empty `Resolver` ⇒ `std::logic_error` (headless-tested), never a silent empty draw list
-- [ ] `modelMatrix == scene::modelMatrix(entity.transform)` verified headlessly
-- [ ] `tests/app/` suite green (dev + release); fake resolver, no GPU
-- [ ] `scene` module untouched (no new dependency added to it)
+- [x] Empty `Resolver` ⇒ `std::logic_error` (headless-tested), never a silent empty draw list
+- [x] `modelMatrix == scene::modelMatrix(entity.transform)` verified headlessly
+- [x] `tests/app/` suite green (dev + release); fake resolver, no GPU
+- [x] `scene` module untouched (no new dependency added to it)
 
 **Blocked by:** 0020 (complete)
-**Status:** pending
+**Status:** completed
+
+> Evidence (2026-09-27): `src/app/draw_list.{hpp,cpp}` land `collectDrawItems()` — deterministic
+> creation-order iteration; unresolved assetId → skip (never failure; Scene unmodified); no
+> dedup/cache/class; `DrawItem::model` documented as a frame-local borrowed pointer (fresh draw
+> list each frame, never retained across registry mutation/reload). Empty `Resolver` ⇒
+> `std::logic_error` thrown at entry (never `std::bad_function_call`, never a silent empty list),
+> plus an `assert` guard in debug. `tests/app/draw_list_test.cpp` = 7 blocks / 15 checks: resolved
+> entity → 1 DrawItem (model + assetId), unresolved → skipped while remaining entities still emit,
+> N entities → N DrawItems incl. duplicate assetId (two items, no dedup), `modelMatrix` equality
+> against 0020's `scene::modelMatrix` on a non-trivial transform, empty-resolver throw, empty
+> scene → empty list. New `noto3d_app` STATIC lib + `noto3d-app-tests` + CTest `app-draw-list-seam`.
+> ctest 7/7 on dev + release (suite count 6→7); test binary prints `ALL PASS`. `scene` module
+> untouched.
 **Points to ADR:** 0010 (Q1/Q5) · 0007 (AssetRegistry is the sole asset authority)
 **Rolls under spec:** ADR-0010 (M4 spec embedded; execution tickets only in docs/ticket/)

@@ -1,5 +1,38 @@
 # CHANGELOG
 
+## [Unreleased] — M4 Scene Composition & Transform (complete)
+
+### M4 — scene foundation, draw-list seam, multi-entity runtime, camera, close (0020–0024; complete)
+- 0020–0024 opened after a grilling session (Q1–Q8) whose decisions are locked in **ADR-0010**
+  (M4 spec embedded at the ADR layer per DOCUMENTATION-LIFECYCLE; execution tickets only in
+  `docs/ticket/`): pure-data Scene (monotonic never-reused EntityId, flat world-space Entities,
+  `scene::modelMatrix` = radians YXZ T·R·S, `clear()`-keeps-counter, M6 snapshot-replace forward
+  contract) → app draw-list seam (`app::collectDrawItems`, unresolved → skip) → CLI→Scene entry
+  model (default `m4_vertical_scene` fixture, `--asset` single-entity, `--demo` demo-only scene,
+  `--asset`+`--demo` exit 1, no `--scene=`) → pure-math `renderer::Camera` (orbit/zoom/pan,
+  initial view = M3, pitch ±89°, zoom distance 0.5–20 independent of near/far) → close =
+  automated regression matrix + manual smoke (no readback/similarity). CONTEXT updated same change.
+- **Contract hardening (pre-implementation, 0021–0024 impacted)**: ADR-0010 Amendment locks the
+  camera spherical convention + initial yaw/pitch/distance (exact M3 eye `(0,0.5,3)`) and
+  orbit/zoom/pan sign/unit semantics; `--demo` becomes a **demo-only Scene** holding exactly one
+  Entity (`demo_checker`, identity transform) — never default + append; `DrawItem::model` lifetime
+  (borrowed, frame-valid, fresh each frame) + callable Resolver (empty ⇒ `std::logic_error`);
+  verification split into automated (exit codes + structured runtime-log `entities=<N>` assertions
+  + CTest) vs manual evidence (`xprop` titles, visual smoke), with unresolved-asset skip proven
+  headlessly in 0021. No architecture change; `GLM_ENABLE_EXPERIMENTAL` stays TU-local.
+- **M4 delivered and closed (0021–0024)**: execution completed, acceptance checked, 0020–0024
+  archived under `docs/archive/ticket/`; ctest now **8/8 on dev + release** (suite count
+  5→6→7→8 across scene / draw-list seam / camera). CLI matrix green incl. the new invalid-flag
+  row — unknown options (`--bogus`) previously fell through silently to exit 0 and are now
+  rejected with exit 1; `--asset`+`--demo` → 1; `--frames=abc`/unknown asset → 1. Structured logs
+  verified for all three entry modes (`m4_vertical_scene`=3 / `<id>`=1 / `--demo`=1 `demo_checker`
+  + `M2_OK (0009 E2E)`); `xprop` titles verified on X11. Manual smoke (layout + orbit/zoom/pan +
+  ESC) user-confirmed; no readback/similarity introduced. CONTEXT updated in the same change.
+- 0025 (code cleanup from review of 0021–0024): opened, `ready-for-agent`, independent of M5 —
+  ① CLI option parsing → `src/app/cli_options` (+ headless parse tests), ② uniform-location cache,
+  ③ `loadManifestOnly()` API, ④ scene-scope flattening, ⑤ `noto3d_asset` PUBLIC GL coupling (M5+),
+  ⑥⑦ M5-era concerns (defer).
+
 ## [Unreleased] — M3 Noto vertical slice (complete)
 
 ### M3 — asset observability (0015–0018; complete)

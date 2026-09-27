@@ -1,15 +1,17 @@
 # noto3d — Noto 3D Emoji Editor (MVP)
 
-C++/OpenGL editor MVP for Noto 3D-style emoji composition. With M0–M2 complete this is an
+C++/OpenGL editor MVP for Noto 3D-style emoji composition. With M0–M3 complete this is an
 engine slice — an asset pipeline plus a minimal windowed renderer (manifest assets the user
-picks, plus a textured demo fixture) — not yet an interactive editor (M4/M5).
+picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-entity composition
++ transforms + camera), then interactivity in M5.
 
 - **Language / API:** C++20, OpenGL **3.3 Core** / GLSL 330, GLFW 3.4 (X11), GLM, ImGui (M5),
   nlohmann/json, tinyobjloader (OBJ/MTL), spdlog (Log backend), glad + stb_image (committed under
   `lib/`)
 - **Docs hierarchy:** `docs/CONTEXT.md` = current implementation truth; `docs/adr/` = decision
-  history; `docs/DEFINITION.md` = project vocabulary; `docs/CHANGELOG.md` = milestone history;
-  `docs/archive/ticket/` = all execution tickets (complete); `docs/ticket/` = pending (empty).
+  history (+ embedded milestone specs); `docs/DEFINITION.md` = project vocabulary;
+  `docs/CHANGELOG.md` = milestone history; `docs/archive/ticket/` = all execution tickets
+  (complete); `docs/ticket/` = pending (currently 0025 code-cleanup for M4).
 
 ## Status
 
@@ -20,7 +22,7 @@ picks, plus a textured demo fixture) — not yet an interactive editor (M4/M5).
 | **M1** | Minimal renderer (0005–0007) | ✅ complete — Mesh upload, Material/shader/first draw, pass hygiene |
 | **M2** | Asset pipeline (0008–0014) | ✅ complete — `AssetRegistry` + OBJ/MTL→Mesh, sRGB diffuse texture pipeline + E2E demo render, demo fixture, texture path safety |
 | **M3** | Noto vertical slice (0015–0018) | ✅ complete — fixture frozen (manifest-integrity contract test, ctest 5/5), selection diagnostics (`M3_INFO` identity line, dynamic title, `--list-assets`), human category verification |
-| M4/M5+ | Scene / ImGui editor | ⏳ not started |
+| **M4** | Scene composition & transform (0020–0024) | ✅ complete — pure-data Scene + draw-list seam + multi-entity runtime + orbit/zoom/pan camera; automated matrix + xprop titles + smoke (ctest 8/8), 0025 code-cleanup pass open |
 
 ### Completed tickets (`docs/archive/ticket/`)
 
@@ -35,8 +37,9 @@ picks, plus a textured demo fixture) — not yet an interactive editor (M4/M5).
   predicate), 0012 app/renderer separation + registry integration, 0010 dependency pinning
 - **0011** M1 code-quality deferred findings (⑦⑧⑨⑩) — folded into 0012
 
-No active tickets. `docs/ticket/` is empty; all execution history lives under
-`docs/archive/ticket/`. Next roadmap milestone: **M4 Scene**.
+Active M4 tickets (0020–0024) are complete and archived; the 0025 code-cleanup pass lives in
+`docs/ticket/`. All execution history lives under `docs/archive/ticket/`. Next roadmap milestone:
+**M5 ImGui Editor**.
 
 ## Build & test
 
@@ -86,8 +89,9 @@ texture ref promotes the asset to `LOADED_WITH_WARNINGS` (geometry still renders
 
 ## Next steps
 
-1. **M3 complete** — Noto vertical slice closed: 6-asset fixture machine-frozen (0016 contract
-   test), runtime-observable (0017), human-verified (0018). 官方 OBJ release swaps
-   `geometry_source` (watch item).
-2. **M4 Scene** (multi-asset composition, transforms) and **M5 ImGui editor** (overlay owns its
-   GL state; ADR-0005 handoff point = `Renderer::End3DPass()`; `lib/imgui` already fetched).
+1. **M5 ImGui editor** (overlay owns its GL state; ADR-0005 handoff point =
+   `Renderer::End3DPass()`; `lib/imgui` already fetched) — next milestone.
+2. **0025 code-cleanup pass** (ready-for-agent, independent of M5): CLI parsing →
+   `src/app/cli_options` + headless parse tests, uniform-location cache, `loadManifestOnly()` API,
+   scene-scope flattening; deferred: asset/renderer GL coupling (M5+), M5-era concerns.
+3. **M6 Save/Load** — Scene JSON as a complete snapshot (forward contract in ADR-0010 Q4).

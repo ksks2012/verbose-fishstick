@@ -38,7 +38,7 @@
 
 namespace {
 
-const char* kWindowTitle = "noto3d (M3)";
+const char* kWindowTitle = "noto3d (M4)";
 const int   kInitialW    = 1280;
 const int   kInitialH    = 720;
 
@@ -313,10 +313,7 @@ static int run(const Options& opts) {
             std::string               sceneName;
             noto3d::app::Resolver     resolver;
 
-            if (opts.assetId && opts.demo) {
-                ok = fail("M4_FAIL: --asset and --demo are mutually exclusive");
-
-            } else if (opts.demo) {
+            if (opts.demo) {
                 // Demo-only Scene: exactly one entity, identity transform (0014 fixture).
                 const noto3d::renderer::Model* demoPtr =
                     registry.loadModelFile(
@@ -482,6 +479,12 @@ int main(int argc, char** argv) {
     // --list-assets exits before any GL context is created (ticket 0017).
     if (opts.listAssets) {
         return listAssetsCommand();
+    }
+    // --asset and --demo are mutually exclusive; reject pre-GL so the
+    // regression test (ticket 0024) can verify exit 1 without a display.
+    if (opts.assetId && opts.demo) {
+        NOTO3D_CRITICAL("M4_FAIL: --asset and --demo are mutually exclusive");
+        return EXIT_FAILURE;
     }
     return run(opts);
 }

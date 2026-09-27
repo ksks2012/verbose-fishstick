@@ -39,18 +39,33 @@ helper) in favour of the Scene pipeline.
 
 ## Acceptance
 
-- [ ] Default run constructs 3-entity `m4_vertical_scene`, renders all three, title
+- [x] Default run constructs 3-entity `m4_vertical_scene`, renders all three, title
       `m4_vertical_scene | noto3d (M4)`, exit 0
-- [ ] `--asset=<id>` single-entity Scene, M3 identity line kept, title `<id> [placeholder] |
+- [x] `--asset=<id>` single-entity Scene, M3 identity line kept, title `<id> [placeholder] |
       noto3d (M4)`, exit 0; unknown asset exit 1
-- [ ] `--demo` constructs a demo-only Scene with **exactly one Entity** (`demo_checker`, identity
+- [x] `--demo` constructs a demo-only Scene with **exactly one Entity** (`demo_checker`, identity
       transform, title `demo_checker [placeholder] | noto3d (M4)`); `M2_OK (0009 E2E)` still
       prints, exit 0
-- [ ] `--asset` + `--demo` ⇒ exit 1; no `--scene=` flag exists
-- [ ] Render path exclusively via `collectDrawItems()` (no direct submit bypass)
-- [ ] Existing exit-code matrix unchanged (valid → 0; `--frames=abc`/`--asset=nope` → non-zero)
+- [x] `--asset` + `--demo` ⇒ exit 1; no `--scene=` flag exists
+- [x] Render path exclusively via `collectDrawItems()` (no direct submit bypass)
+- [x] Existing exit-code matrix unchanged (valid → 0; `--frames=abc`/`--asset=nope` → non-zero)
 
 **Blocked by:** 0021 (complete)
-**Status:** pending
+**Status:** completed
+
+> Evidence (2026-09-26/27): `main.cpp` builds a Scene per entry mode and reaches the Renderer only
+> through `collectDrawItems()` — no legacy `registry.model() → submit()` hotspot remains. Default →
+> named fixture `m4_vertical_scene` with `smile@(-1.5,0,0)` / `crown@(0,0,0)` /
+> `sunglasses@(1.5,0,0)`; `--asset=<id>` → single-entity Scene built directly (never
+> fixture-then-filter) keeping the `M3_INFO selected asset ...` identity line; `--demo` →
+> demo-only Scene with exactly one Entity (`demo_checker`, identity transform) resolved via the
+> registry's standalone `loadModelFile` path, and `M2_OK (0009 E2E)` prints through the pipeline.
+> Every mode logs the single structured line `M4_INFO rendering scene '<name>' entities=<N>` right
+> after construction (the only process-level window into Scene size; no `--dump-scene`). Titles per
+> the single-entity rule: `m4_vertical_scene | noto3d (M4)` / `<id> [placeholder] | noto3d (M4)` /
+> `demo_checker [placeholder] | noto3d (M4)`. `--asset`+`--demo` → exit 1 (mutually exclusive);
+> no `--scene=` flag. Q8's "invalid flag" row hardened in this ticket: `parseOptions` now rejects
+> unknown options with a CRITICAL diagnostic + exit 1 (previously silently ignored → exit 0; e.g.
+> `--bogus`). Verified on dev + release (matrix in 0024).
 **Points to ADR:** 0010 (Q5/Q6) · 0009 (M3 observability line preserved) · 0008 (CLI)
 **Rolls under spec:** ADR-0010 (M4 spec embedded; execution tickets only in docs/ticket/)

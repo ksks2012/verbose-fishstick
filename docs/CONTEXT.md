@@ -12,10 +12,11 @@ Document hierarchy:
 C++/OpenGL editor MVP for Noto 3D-style emoji composition ("emoji_editor").
 
 ## Current milestone
-M4 Scene Composition & Transform **in progress** (0020–0024). M0 (Environment/build),
+M4 Scene Composition & Transform **complete** (0020–0024, archived; 0025 code-cleanup pass
+`ready-for-agent`, independent of M5). M0 (Environment/build),
 M0.5 (Asset contract spike), M1 (minimal renderer + pass hygiene), M2 (0008 → 0014 → 0009 → 0013 +
 0012/0011/0010) and M3 (0015 → 0016 → 0017 → 0018) are done and verified. Completed tickets are
-archived at `docs/archive/ticket/` (all 18). Working tree state:
+archived at `docs/archive/ticket/` (all 24). Working tree state:
 
 - `noto3d-editor` consumes the AssetRegistry: `--asset=<id>` (default first renderable manifest
   asset) and `--demo` (0014 fixture) render through the registry; 0009's E2E gate is closed
@@ -24,21 +25,25 @@ archived at `docs/archive/ticket/` (all 18). Working tree state:
   reference=<path>`; window title is `<id> [placeholder] | noto3d (M3)`; `--list-assets` is a
   pre-GL diagnostic CLI. M3 fixture frozen by `manifest_integrity_test` (ctest 5/5) and
   human-verified per category (0018).
-- M4 locked (ADR-0010, grilling Q1–Q8): pure-data Scene (EntityId monotonic/never-reused,
+- M4 delivered (ADR-0010, grilling Q1–Q8): pure-data Scene (EntityId monotonic/never-reused,
   world-space Transform·Matrix via `scene::modelMatrix`), app-level draw-list seam
-  (`app::collectDrawItems`, unresolved → skip), CLI→Scene entry model (default
-  `m4_vertical_scene`, `--asset` single-entity, `--demo` demo-only fixture scene,
-  `--asset`+`--demo` → exit 1),
-  pure-math orbit/zoom/pan Camera, and an automated-matrix + manual-smoke close.
+  (`app::collectDrawItems`, unresolved → skip, empty Resolver ⇒ `std::logic_error`), CLI→Scene
+  entry model (default `m4_vertical_scene`, `--asset` single-entity, `--demo` demo-only fixture
+  scene, `--asset`+`--demo` → exit 1, no `--scene=`, invalid flag → exit 1),
+  pure-math orbit/zoom/pan Camera (spherical convention locked; initial eye exactly `(0,0.5,3)`).
+  Closed by an automated CLI/`M4_INFO`/CTest matrix (8/8 dev + release) + xprop title evidence +
+  user-confirmed manual smoke; no readback/similarity. CLI→Scene render path is exclusively via
+  `collectDrawItems()` — no direct `registry.model() → submit()` bypass.
 - 0011 folded items done: ⑦ `#error` shader-dir, ⑧ no inline cube / no `optional` ceremony,
   ⑨ validated `--frames=` (non-numeric/negative exits non-zero), ⑩ uniform-location cache.
 - 0010 done: all six Git deps pinned by immutable SHA (each resolves to its release tag);
   no archive sources → `URL_HASH` n/a; dev + release configure/build + `ctest` green.
 
-Next on the roadmap: **M4 in progress → M5 ImGui** (ADR-0005 ImGui-limitation note at the
+Next on the roadmap: **M4 complete → M5 ImGui** (ADR-0005 ImGui-limitation note at the
 Renderer's `End3DPass()`; `lib/imgui` already fetched). Per DOCUMENTATION-LIFECYCLE, specs live at
 the ADR layer: the M3 spec is embedded in **ADR-0009**, the M4 spec in **ADR-0010**; `docs/ticket/`
-holds execution tickets only (currently 0020–0024), rolled under accepted ADRs.
+holds execution tickets only (currently 0025 code-cleanup, rolled under no ADR), plus completed
+0020–0024 archived under accepted ADRs.
 M0 scope, user stories and acceptance matrix: `docs/archive/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
 Project overview / build / test quickstart: repo-root `README.md`.
@@ -126,7 +131,8 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
 - [x] Replace GIT_TAG pins with commit SHA (+ URL_HASH) once dev build is stable
       (authored as ticket 0010 — **completed**; all six deps on immutable SHA).
 - [x] M3 vertical slice (ADR-0009; 0015–0018).
-- [ ] M4 scene composition (ADR-0010; 0020–0024 in docs/ticket/). Next after M4: M5 ImGui editor.
+- [x] M4 scene composition (ADR-0010; 0020–0024) — **complete**, archived; open 0025 code-cleanup
+      pass independent of M5. Next: M5 ImGui editor.
 
 ## Execution tickets (active ones live in docs/ticket/; completed archived at docs/archive/ticket/)
 - M0: 0001 (spec) + 0002–0004 (execution) — complete
@@ -143,13 +149,24 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   diagnostics + window-title identity + `--list-assets`), 0018 (human Noto-category verification:
   6/6 PASS manual matrix, 3 shared placeholder silhouettes observed) — complete, archived
 
-### M4 (spec embedded in ADR-0010; in progress)
-- 0020 (Scene foundation: EntityId/Transform/Entity/Scene + modelMatrix) — **complete**, archived
+### M4 (spec embedded in ADR-0010; complete, archived)
+- 0020 (Scene foundation: EntityId/Transform/Entity/Scene + modelMatrix) — complete, archived
   (ctest 6/6 dev + release; 28 headless checks; glm::eulerAngleYXZ experimental opt-in noted)
-- 0021 (draw-list seam: `app::collectDrawItems`) — pending, in docs/ticket/
-- 0022 (multi-entity runtime: CLI→Scene, no legacy render path) — pending
-- 0023 (Camera orbit/zoom/pan + GLFW wiring) — pending
-- 0024 (integration/regression matrix + manual smoke, M4 close) — pending
+- 0021 (draw-list seam: `app::collectDrawItems`) — complete, archived (7 blocks/15 checks;
+  empty Resolver ⇒ `std::logic_error`; borrowed model pointer; suite count 6→7)
+- 0022 (multi-entity runtime: CLI→Scene, no legacy render path) — complete, archived
+  (default `m4_vertical_scene`=3 / `--asset`=1 / `--demo`=1 demo_checker; `M4_INFO` log; titles;
+  invalid flag → exit 1; no `--scene=`)
+- 0023 (Camera orbit/zoom/pan + GLFW wiring) — complete, archived (13 blocks/20 checks → ALL
+  PASS; suite count 7→8)
+- 0024 (integration/regression matrix + manual smoke, M4 close) — complete, archived (CLI matrix
+  + `M4_INFO`/`M2_OK` logs green dev+release, ctest 8/8; xprop titles + user-confirmed smoke)
+
+### M4 (post-close cleanup; in docs/ticket/)
+- 0025 (code cleanup from review of 0021–0024) — `ready-for-agent`, no blocker, independent of M5:
+  ① CLI parsing → `src/app/cli_options` + headless parse tests, ② ShaderProgram uniform-location
+  cache, ③ `loadManifestOnly()` API placement, ④ main.cpp scene-scope flattening, ⑤ noto3d_asset
+  PUBLIC GL coupling (defer M5+), ⑥⑦ M5-era concerns (defer)
 
 ## Known MVP limitations
 - No transparent-object depth sorting.
