@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## [Unreleased] — M4 Scene Composition & Transform (complete)
+## [Unreleased] — M4 Scene Composition & Transform (complete; 0025 cleanup pass complete)
 
 ### M4 — scene foundation, draw-list seam, multi-entity runtime, camera, close (0020–0024; complete)
 - 0020–0024 opened after a grilling session (Q1–Q8) whose decisions are locked in **ADR-0010**
@@ -28,17 +28,39 @@
   verified for all three entry modes (`m4_vertical_scene`=3 / `<id>`=1 / `--demo`=1 `demo_checker`
   + `M2_OK (0009 E2E)`); `xprop` titles verified on X11. Manual smoke (layout + orbit/zoom/pan +
   ESC) user-confirmed; no readback/similarity introduced. CONTEXT updated in the same change.
-- 0025 (code cleanup from review of 0021–0024, narrowed by a strict re-review) — opened,
-  `ready-for-agent`, independent of M5: ① CLI option parsing → `src/app/cli_options` + headless
-  `Options`-content tests (P1), ④ flatten `run()`'s GL scope into `renderScene()` (P2), ② verify
-  the existing uniform-location cache (verification-only), ③ audit the `loadManifestOnly()` seam
-  without removing or `#ifdef`-gating it (production `--list-assets`, 0017), ⑤ asset→renderer
-  PUBLIC GL coupling recorded as deferred, ⑧ record the CMake target graph. No public-API removal,
-  no test-only build conditionals, no library splits, no M5 feature design pulled into M4.
+- **0025 code cleanup complete** (post-M4 pass, narrowed by a strict re-review, archived at
+  `docs/archive/ticket/0025-m4-code-cleanup.md`; no public-API removal, no test-only build
+  conditionals, no library split, no M5 design pulled into M4):
+  - ① `Options`/`parseOptions` extracted from `main.cpp` to `src/app/cli_options.{hpp,cpp}` and now
+    unit-tested headlessly by `tests/app/cli_options_test.cpp` (12 blocks / 40 checks asserting
+    `Options` **content**, new CTest `app-cli-parse-contract`) — the CLI contract (ADR-0010 Q8) no
+    longer needs a forked subprocess. Parsing stays a pure syntax contract: `--asset`+`--demo`
+    exclusion remains pre-GL in `main()`, unknown-asset validation stays in the registry layer;
+    the existing optional/flag shape was kept instead of introducing a mode enum.
+  - ④ `run()`'s ~200-line bare `{ ... }` block extracted into
+    `int renderScene(GLFWwindow*, const noto3d::app::Options&)`: GL-owning objects (shader,
+    registry → Mesh/Texture, renderer, camera) are locals of the helper and are destroyed while the
+    context is still current, so the GL-scope lifetime rule (ticket 0012) is now structural
+    instead of
+    conventional. `run()` keeps only the GLFW lifecycle. Readability change, zero behaviour change.
+  - ② uniform-location cache verified against the three invariants (hit → no
+    `glGetUniformLocation`; miss → query + store; cache cleared whenever the program handle is
+    invalidated — there is in fact no `reload()` method) and left byte-identical: no gratuitous
+    "improvement", no new GL test.
+  - ③ `loadManifestOnly()` audited in documentation only: it is the production entry point behind
+    `--list-assets` (0017/ADR-0009) plus the CPU-only path used by asset tests; removal, `testing`-namespace
+    moves and `#ifdef NOTO3D_TESTING` gating all rejected. Hand-off question recorded in 0027.
+  - ⑤ `noto3d_asset` → `noto3d_renderer` stays **PUBLIC** — untouched, owned by 0027.
+  - ⑧ actual CMake target graph recorded in the ticket (incl. `noto3d_core` using glad **headers
+    only**, `noto3d_scene` → glm only, `noto3d_app` window/GLFW-free with a `renderer::Model*` type
+    dependency, headless camera test). No overshoot fixed; three observations recorded instead.
+  - Verification: red-first TDD, `ctest` **15/15 on dev + release** (suite 14→15), 0024 matrix
+    unchanged (5 valid → 0, 6 invalid → 1), `M0_OK`/`M4_INFO`/`M1_DONE`/`M2_OK` log content and
+    order unchanged, `xprop WM_NAME` titles re-verified for all three entry modes.
 - 0026 (M5 input & interaction config follow-ups) and 0027 (asset CPU/GPU boundary architecture
-  spike) — opened, deferred; split out of 0025 so the cleanup ticket stays free of M5 design.
-  0025 carries a top-level invariant: no externally observable M4 behaviour or established
-  architecture contract changes under the cleanup.
+  spike) — split out of 0025, deferred; the cleanup ticket stayed free of M5 design under a
+  top-level invariant (no externally observable M4 behaviour or established architecture contract
+  changes), which held.
 
 ## [Unreleased] — M3 Noto vertical slice (complete)
 

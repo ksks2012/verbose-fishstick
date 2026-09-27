@@ -6,6 +6,7 @@
 
 #include <asset_registry.hpp>
 #include <camera.hpp>
+#include <cli_options.hpp>
 #include <draw_list.hpp>
 #include <gl_capability.hpp>
 #include <log.hpp>
@@ -15,11 +16,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <cstdint>
 #include <cstdlib>
-#include <cstring>
-#include <optional>
-#include <stdexcept>
 #include <string>
 
 // Shader + asset locations are owned by the build system, never discovered at
@@ -38,59 +35,10 @@
 
 namespace {
 
+// Window geometry/title stay here (GLFW concerns, not CLI syntax) — ticket 0025.
 const char* kWindowTitle = "noto3d (M4)";
 const int   kInitialW    = 1280;
 const int   kInitialH    = 720;
-
-// Command-line options for the demo runner.
-struct Options {
-    int frameLimit = -1;                  // < 0 = unlimited
-    std::optional<std::string> assetId;   // manifest asset to render (default: first renderable)
-    bool  demo   = false;                 // also render the 0014 demo_checker fixture (textured)
-    bool  listAssets = false;             // diagnostic CLI: print manifest assets, exit pre-GL
-};
-
-// Parses --frames=N (validated, ticket 0011-⑨), --asset=<id>, --demo, --list-assets.
-// Returns false → caller exits non-zero with a diagnostic (never a silent false-green).
-bool parseOptions(int argc, char** argv, Options& out) {
-    for (int i = 1; i < argc; ++i) {
-        const char* arg = argv[i];
-
-        if (std::strncmp(arg, "--frames=", 9) == 0) {
-            const char*    num      = arg + 9;
-            const std::string token(num);
-            std::size_t    consumed = 0;
-            int            v        = 0;
-            try {
-                v = std::stoi(token, &consumed);
-            } catch (const std::exception&) {
-                v = -1;  // non-numeric → caught by the v < 0 check below
-            }
-            if (consumed != token.size() || v < 0) {
-                NOTO3D_CRITICAL("--frames= expects a non-negative integer, got '{}'", num);
-                return false;
-            }
-            out.frameLimit = v;
-        } else if (std::strncmp(arg, "--asset=", 8) == 0) {
-            const char* id = arg + 8;
-            if (*id == '\0') {
-                NOTO3D_CRITICAL("--asset= requires a manifest asset id");
-                return false;
-            }
-            out.assetId = id;
-        } else if (std::strcmp(arg, "--demo") == 0) {
-            out.demo = true;
-        } else if (std::strcmp(arg, "--list-assets") == 0) {
-            out.listAssets = true;
-        } else {
-            // Unknown/unsupported flag: rejection is a CLI contract (ADR-0010 Q8
-            // "invalid flag → exit 1"; ticket 0024 matrix). Never silently ignore.
-            NOTO3D_CRITICAL("unknown option '{}'", arg);
-            return false;
-        }
-    }
-    return true;
-}
 
 const char* geometrySourceName(const noto3d::asset::AssetEntry& e) {
     using noto3d::asset::GeometrySource;
@@ -180,9 +128,213 @@ bool loadBaseShader(noto3d::renderer::ShaderProgram& out) {
     }
 }
 
+// ---- Scene scope --------------------------------------------------------
+// All GL-owning objects (shader, registry → Mesh/Texture, renderer) are locals
+// of renderScene() so they are destroyed while the context is still current —
+// never after glfwDestroyWindow/glfwTerminate (which would delete GL objects
+// without a context).  Making the function itself the scope is what guarantees
+// that ordering: run() keeps only the GLFW lifecycle (ticket 0025).
+int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
+    int  exitCode = EXIT_SUCCESS;
+    int  frames   = 0;
+    bool ranLoop  = false;
+    InputState inputState;
+    glfwSetWindowUserPointer(window, &inputState);
+
+    noto3d::renderer::ShaderProgram baseShader;
+    noto3d::asset::AssetRegistry    registry;
+    noto3d::renderer::Renderer      renderer;
+    noto3d::renderer::Camera        camera;   // ticket 0023
+
+    auto fail = [&](const char* msg) {
+        NOTO3D_CRITICAL("{}", msg);
+        exitCode = EXIT_FAILURE;
+        return false;
+    };
+
+    bool ok = true;
+
+    // ---- M1 — base shader (ticket 0011-⑧: no optional wrapper, no inline cube)
+    ok = loadBaseShader(baseShader);
+    if (!ok) {
+        // M1_FAIL already logged; skip straight to scope teardown.
+    } else {
+        NOTO3D_INFO("M1_OK base shader compiled; assets load via AssetRegistry");
+
+        // ---- M2 — manifest assets through the AssetRegistry (ticket 0012)
+        const auto loadR =
+            registry.load(std::string(NOTO3D_ASSETS_DIR) + "/manifest.json");
+        for (const auto& d : loadR.diagnostics) {
+            NOTO3D_WARN("M2_WARN  [{}] {}",
+                        d.assetId.empty() ? "manifest" : d.assetId, d.message);
+        }
+        NOTO3D_INFO("M2_INFO  manifest loaded: {} ok, {} warned, {} failed",
+                    loadR.loaded, loadR.warned, loadR.failed);
+
+        // ---- M4 — Scene construction (ADR-0010 Q5/Q6) -------------------------
+        // Build a Scene for the selected entry mode; every render path goes through
+        // collectDrawItems() — no direct submit bypass (ticket 0022).
+        // --asset and --demo are mutually exclusive (ticket 0022 CLI contract).
+        noto3d::scene::Scene      scene;
+        std::string               sceneName;
+        noto3d::app::Resolver     resolver;
+
+        if (opts.demo) {
+            // Demo-only Scene: exactly one entity, identity transform (0014 fixture).
+            const noto3d::renderer::Model* demoPtr =
+                registry.loadModelFile(
+                    std::string(NOTO3D_ASSETS_DIR) +
+                        "/geometry/placeholders/demo_checker/demo_checker.obj",
+                    "demo_checker");
+            if (!demoPtr) {
+                ok = fail("M2_FAIL: demo fixture failed to load");
+            } else {
+                bool textured = false;
+                for (const auto& sm : *demoPtr) {
+                    textured = textured || sm.material.texture.has_value();
+                }
+                if (textured) {
+                    NOTO3D_INFO("M2_OK   demo_checker fixture rendered with diffuse "
+                                "texture (0009 E2E)");
+                } else {
+                    NOTO3D_WARN("M2_WARN  demo_checker fixture rendered WITHOUT "
+                                "a diffuse texture");
+                }
+                scene.createEntity("demo_checker", "demo_checker");  // identity transform
+                sceneName = "demo_checker";
+                resolver = [demoPtr](const std::string& id) -> const noto3d::renderer::Model* {
+                    return (id == "demo_checker") ? demoPtr : nullptr;
+                };
+            }
+
+        } else if (opts.assetId) {
+            // Single-entity Scene from --asset=<id>; M3 identity line kept.
+            const noto3d::asset::AssetEntry* entry = registry.findEntry(*opts.assetId);
+            if (!entry) {
+                const std::string msg =
+                    "M2_FAIL: unknown asset '" + *opts.assetId + "'";
+                ok = fail(msg.c_str());
+            } else {
+                NOTO3D_INFO("M3_INFO  selected asset '{}' geometry={} reference={}",
+                            entry->id, geometrySourceName(*entry), referenceName(*entry));
+                scene.createEntity(entry->id, entry->id);  // identity transform
+                sceneName = entry->id;
+                resolver = [&registry](const std::string& id)
+                               -> const noto3d::renderer::Model* {
+                    return registry.model(id);
+                };
+            }
+
+        } else {
+            // Default: m4_vertical_scene — 3 entities spread on the X axis.
+            const auto addAt = [&](const std::string& assetId, float x) {
+                const auto eid = scene.createEntity(assetId, assetId);
+                if (auto* e = scene.findEntity(eid)) {
+                    e->transform.position = {x, 0.0f, 0.0f};
+                }
+            };
+            addAt("smile",       -1.5f);
+            addAt("crown",        0.0f);
+            addAt("sunglasses",   1.5f);
+            sceneName = "m4_vertical_scene";
+            resolver = [&registry](const std::string& id)
+                           -> const noto3d::renderer::Model* {
+                return registry.model(id);
+            };
+        }
+
+        // Structured log — 0024's automated matrix asserts on this line.
+        if (ok) {
+            NOTO3D_INFO("M4_INFO rendering scene '{}' entities={}",
+                        sceneName,
+                        static_cast<int>(scene.entities().size()));
+        }
+
+        // Window title: single-entity rule or scene name (ADR-0010/ticket 0022)
+        if (ok) {
+            std::string title;
+            if (opts.demo) {
+                title = "demo_checker [placeholder] | noto3d (M4)";
+            } else if (opts.assetId) {
+                const auto* entry = registry.findEntry(*opts.assetId);
+                const std::string src =
+                    entry ? geometrySourceName(*entry) : "unknown";
+                title = *opts.assetId + " [" + src + "] | noto3d (M4)";
+            } else {
+                title = sceneName + " | noto3d (M4)";
+            }
+            glfwSetWindowTitle(window, title.c_str());
+        }
+
+        // ---- Render loop ---------------------------------------------------
+        if (ok) {
+            while (!glfwWindowShouldClose(window) &&
+                   (opts.frameLimit < 0 || frames < opts.frameLimit)) {
+                glfwPollEvents();
+                if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+                    glfwSetWindowShouldClose(window, GLFW_TRUE);
+                }
+
+                // Camera input (LMB=orbit, MMB=pan, wheel=zoom; ticket 0023)
+                {
+                    double curX, curY;
+                    glfwGetCursorPos(window, &curX, &curY);
+                    if (inputState.firstMove) {
+                        inputState.prevX     = curX;
+                        inputState.prevY     = curY;
+                        inputState.firstMove = false;
+                    }
+                    const float dx = static_cast<float>(curX - inputState.prevX);
+                    const float dy = static_cast<float>(curY - inputState.prevY);
+                    inputState.prevX = curX;
+                    inputState.prevY = curY;
+
+                    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+                        camera.orbit(dx * kOrbitSens, -dy * kOrbitSens);
+                    }
+                    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
+                        camera.pan(dx * kPanSens, -dy * kPanSens);
+                    }
+                    if (inputState.scrollY != 0.0f) {
+                        camera.zoom(inputState.scrollY * kZoomSens);
+                        inputState.scrollY = 0.0f;
+                    }
+                }
+
+                // Compute view + projection from Camera (ADR-0010 Q7)
+                int fbW = 0, fbH = 0;
+                glfwGetFramebufferSize(window, &fbW, &fbH);
+                const float aspect = (fbH > 0)
+                    ? static_cast<float>(fbW) / static_cast<float>(fbH) : 1.0f;
+                const auto proj = camera.projectionMatrix(aspect);
+                const auto view = camera.viewMatrix();
+
+                renderer.Begin3DPass();
+                // All draws go through collectDrawItems — no bypass (ADR-0010 Q6)
+                for (const auto& item :
+                         noto3d::app::collectDrawItems(scene, resolver)) {
+                    const glm::mat4 mvp = proj * view * item.modelMatrix;
+                    for (const auto& sm : *item.model) {
+                        renderer.submit(sm.mesh, sm.material, baseShader, mvp);
+                    }
+                }
+                renderer.End3DPass();
+
+                glfwSwapBuffers(window);
+                ++frames;
+            }
+            ranLoop = true;
+        }
+    }
+
+    if (ranLoop) NOTO3D_INFO("M1_DONE rendered {} frames", frames);
+    // Every GL object above is destroyed on return — while the context is current.
+    return exitCode;
+}
+
 }  // namespace
 
-static int run(const Options& opts) {
+static int run(const noto3d::app::Options& opts) {
     if (!glfwInit()) {
         NOTO3D_CRITICAL("M0_FAIL: glfwInit failed");
         return EXIT_FAILURE;
@@ -264,206 +416,10 @@ static int run(const Options& opts) {
     }
 #endif
 
-    // ---- Scene scope --------------------------------------------------------
-    // All GL-owning objects (shader, registry → Mesh/Texture, renderer) live in
-    // this scope so they are destroyed while the context is still current —
-    // never after glfwDestroyWindow/glfwTerminate (which would delete GL objects
-    // without a context).
-    int  exitCode = EXIT_SUCCESS;
-    int  frames   = 0;
-    bool ranLoop  = false;
-    InputState inputState;
-    glfwSetWindowUserPointer(window, &inputState);
-    {
-        noto3d::renderer::ShaderProgram baseShader;
-        noto3d::asset::AssetRegistry    registry;
-        noto3d::renderer::Renderer      renderer;
-        noto3d::renderer::Camera        camera;   // ticket 0023
+    // The whole render path (GL objects, Scene, main loop) lives in renderScene()
+    // so every GL object dies before the context does.
+    const int exitCode = renderScene(window, opts);
 
-        auto fail = [&](const char* msg) {
-            NOTO3D_CRITICAL("{}", msg);
-            exitCode = EXIT_FAILURE;
-            return false;
-        };
-
-        bool ok = true;
-
-        // ---- M1 — base shader (ticket 0011-⑧: no optional wrapper, no inline cube)
-        ok = loadBaseShader(baseShader);
-        if (!ok) {
-            // M1_FAIL already logged; skip straight to scope teardown.
-        } else {
-            NOTO3D_INFO("M1_OK base shader compiled; assets load via AssetRegistry");
-
-            // ---- M2 — manifest assets through the AssetRegistry (ticket 0012)
-            const auto loadR =
-                registry.load(std::string(NOTO3D_ASSETS_DIR) + "/manifest.json");
-            for (const auto& d : loadR.diagnostics) {
-                NOTO3D_WARN("M2_WARN  [{}] {}",
-                            d.assetId.empty() ? "manifest" : d.assetId, d.message);
-            }
-            NOTO3D_INFO("M2_INFO  manifest loaded: {} ok, {} warned, {} failed",
-                        loadR.loaded, loadR.warned, loadR.failed);
-
-            // ---- M4 — Scene construction (ADR-0010 Q5/Q6) -------------------------
-            // Build a Scene for the selected entry mode; every render path goes through
-            // collectDrawItems() — no direct submit bypass (ticket 0022).
-            // --asset and --demo are mutually exclusive (ticket 0022 CLI contract).
-            noto3d::scene::Scene      scene;
-            std::string               sceneName;
-            noto3d::app::Resolver     resolver;
-
-            if (opts.demo) {
-                // Demo-only Scene: exactly one entity, identity transform (0014 fixture).
-                const noto3d::renderer::Model* demoPtr =
-                    registry.loadModelFile(
-                        std::string(NOTO3D_ASSETS_DIR) +
-                            "/geometry/placeholders/demo_checker/demo_checker.obj",
-                        "demo_checker");
-                if (!demoPtr) {
-                    ok = fail("M2_FAIL: demo fixture failed to load");
-                } else {
-                    bool textured = false;
-                    for (const auto& sm : *demoPtr) {
-                        textured = textured || sm.material.texture.has_value();
-                    }
-                    if (textured) {
-                        NOTO3D_INFO("M2_OK   demo_checker fixture rendered with diffuse "
-                                    "texture (0009 E2E)");
-                    } else {
-                        NOTO3D_WARN("M2_WARN  demo_checker fixture rendered WITHOUT "
-                                    "a diffuse texture");
-                    }
-                    scene.createEntity("demo_checker", "demo_checker");  // identity transform
-                    sceneName = "demo_checker";
-                    resolver = [demoPtr](const std::string& id) -> const noto3d::renderer::Model* {
-                        return (id == "demo_checker") ? demoPtr : nullptr;
-                    };
-                }
-
-            } else if (opts.assetId) {
-                // Single-entity Scene from --asset=<id>; M3 identity line kept.
-                const noto3d::asset::AssetEntry* entry = registry.findEntry(*opts.assetId);
-                if (!entry) {
-                    const std::string msg =
-                        "M2_FAIL: unknown asset '" + *opts.assetId + "'";
-                    ok = fail(msg.c_str());
-                } else {
-                    NOTO3D_INFO("M3_INFO  selected asset '{}' geometry={} reference={}",
-                                entry->id, geometrySourceName(*entry), referenceName(*entry));
-                    scene.createEntity(entry->id, entry->id);  // identity transform
-                    sceneName = entry->id;
-                    resolver = [&registry](const std::string& id)
-                                   -> const noto3d::renderer::Model* {
-                        return registry.model(id);
-                    };
-                }
-
-            } else {
-                // Default: m4_vertical_scene — 3 entities spread on the X axis.
-                const auto addAt = [&](const std::string& assetId, float x) {
-                    const auto eid = scene.createEntity(assetId, assetId);
-                    if (auto* e = scene.findEntity(eid)) {
-                        e->transform.position = {x, 0.0f, 0.0f};
-                    }
-                };
-                addAt("smile",       -1.5f);
-                addAt("crown",        0.0f);
-                addAt("sunglasses",   1.5f);
-                sceneName = "m4_vertical_scene";
-                resolver = [&registry](const std::string& id)
-                               -> const noto3d::renderer::Model* {
-                    return registry.model(id);
-                };
-            }
-
-            // Structured log — 0024's automated matrix asserts on this line.
-            if (ok) {
-                NOTO3D_INFO("M4_INFO rendering scene '{}' entities={}",
-                            sceneName,
-                            static_cast<int>(scene.entities().size()));
-            }
-
-            // Window title: single-entity rule or scene name (ADR-0010/ticket 0022)
-            if (ok) {
-                std::string title;
-                if (opts.demo) {
-                    title = "demo_checker [placeholder] | noto3d (M4)";
-                } else if (opts.assetId) {
-                    const auto* entry = registry.findEntry(*opts.assetId);
-                    const std::string src =
-                        entry ? geometrySourceName(*entry) : "unknown";
-                    title = *opts.assetId + " [" + src + "] | noto3d (M4)";
-                } else {
-                    title = sceneName + " | noto3d (M4)";
-                }
-                glfwSetWindowTitle(window, title.c_str());
-            }
-
-            // ---- Render loop ---------------------------------------------------
-            if (ok) {
-                while (!glfwWindowShouldClose(window) &&
-                       (opts.frameLimit < 0 || frames < opts.frameLimit)) {
-                    glfwPollEvents();
-                    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-                        glfwSetWindowShouldClose(window, GLFW_TRUE);
-                    }
-
-                    // Camera input (LMB=orbit, MMB=pan, wheel=zoom; ticket 0023)
-                    {
-                        double curX, curY;
-                        glfwGetCursorPos(window, &curX, &curY);
-                        if (inputState.firstMove) {
-                            inputState.prevX     = curX;
-                            inputState.prevY     = curY;
-                            inputState.firstMove = false;
-                        }
-                        const float dx = static_cast<float>(curX - inputState.prevX);
-                        const float dy = static_cast<float>(curY - inputState.prevY);
-                        inputState.prevX = curX;
-                        inputState.prevY = curY;
-
-                        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-                            camera.orbit(dx * kOrbitSens, -dy * kOrbitSens);
-                        }
-                        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
-                            camera.pan(dx * kPanSens, -dy * kPanSens);
-                        }
-                        if (inputState.scrollY != 0.0f) {
-                            camera.zoom(inputState.scrollY * kZoomSens);
-                            inputState.scrollY = 0.0f;
-                        }
-                    }
-
-                    // Compute view + projection from Camera (ADR-0010 Q7)
-                    int fbW = 0, fbH = 0;
-                    glfwGetFramebufferSize(window, &fbW, &fbH);
-                    const float aspect = (fbH > 0)
-                        ? static_cast<float>(fbW) / static_cast<float>(fbH) : 1.0f;
-                    const auto proj = camera.projectionMatrix(aspect);
-                    const auto view = camera.viewMatrix();
-
-                    renderer.Begin3DPass();
-                    // All draws go through collectDrawItems — no bypass (ADR-0010 Q6)
-                    for (const auto& item :
-                             noto3d::app::collectDrawItems(scene, resolver)) {
-                        const glm::mat4 mvp = proj * view * item.modelMatrix;
-                        for (const auto& sm : *item.model) {
-                            renderer.submit(sm.mesh, sm.material, baseShader, mvp);
-                        }
-                    }
-                    renderer.End3DPass();
-
-                    glfwSwapBuffers(window);
-                    ++frames;
-                }
-                ranLoop = true;
-            }
-        }
-    }
-
-    // Scene scope closed: every GL object is freed while the context was current.
-    if (ranLoop) NOTO3D_INFO("M1_DONE rendered {} frames", frames);
     glfwDestroyWindow(window);
     glfwTerminate();
     return exitCode;
@@ -472,8 +428,8 @@ static int run(const Options& opts) {
 int main(int argc, char** argv) {
     noto3d::core::log_init();
 
-    Options opts;
-    if (!parseOptions(argc, argv, opts)) {
+    noto3d::app::Options opts;
+    if (!noto3d::app::parseOptions(argc, argv, opts)) {
         return EXIT_FAILURE;
     }
     // --list-assets exits before any GL context is created (ticket 0017).

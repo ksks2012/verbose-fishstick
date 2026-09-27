@@ -12,11 +12,11 @@ Document hierarchy:
 C++/OpenGL editor MVP for Noto 3D-style emoji composition ("emoji_editor").
 
 ## Current milestone
-M4 Scene Composition & Transform **complete** (0020–0024, archived; 0025 code-cleanup pass
-`ready-for-agent` and 0026/0027 follow-ups deferred — all independent of M5). M0 (Environment/build),
+M4 Scene Composition & Transform **complete** (0020–0024) and its post-close **0025 code-cleanup
+pass complete** (0020–0025 archived; 0026/0027 follow-ups deferred — all independent of M5). M0 (Environment/build),
 M0.5 (Asset contract spike), M1 (minimal renderer + pass hygiene), M2 (0008 → 0014 → 0009 → 0013 +
 0012/0011/0010) and M3 (0015 → 0016 → 0017 → 0018) are done and verified. Completed tickets are
-archived at `docs/archive/ticket/` (all 24). Working tree state:
+archived at `docs/archive/ticket/` (all 25). Working tree state:
 
 - `noto3d-editor` consumes the AssetRegistry: `--asset=<id>` (default first renderable manifest
   asset) and `--demo` (0014 fixture) render through the registry; 0009's E2E gate is closed
@@ -42,8 +42,8 @@ archived at `docs/archive/ticket/` (all 24). Working tree state:
 Next on the roadmap: **M4 complete → M5 ImGui** (ADR-0005 ImGui-limitation note at the
 Renderer's `End3DPass()`; `lib/imgui` already fetched). Per DOCUMENTATION-LIFECYCLE, specs live at
 the ADR layer: the M3 spec is embedded in **ADR-0009**, the M4 spec in **ADR-0010**; `docs/ticket/`
-holds execution tickets only (currently 0025 code-cleanup, rolled under no ADR), plus completed
-0020–0024 archived under accepted ADRs.
+holds execution tickets only (currently the deferred 0026/0027 follow-ups), plus completed
+0020–0025 archived under accepted ADRs.
 M0 scope, user stories and acceptance matrix: `docs/archive/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
 Project overview / build / test quickstart: repo-root `README.md`.
@@ -131,8 +131,9 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
 - [x] Replace GIT_TAG pins with commit SHA (+ URL_HASH) once dev build is stable
       (authored as ticket 0010 — **completed**; all six deps on immutable SHA).
 - [x] M3 vertical slice (ADR-0009; 0015–0018).
-- [x] M4 scene composition (ADR-0010; 0020–0024) — **complete**, archived; open 0025 code-cleanup
-      pass independent of M5. Next: M5 ImGui editor.
+- [x] M4 scene composition (ADR-0010; 0020–0024) — **complete**, archived.
+- [x] 0025 M4 code-cleanup pass — **complete**, archived (independent of M5).
+      Next: M5 ImGui editor.
 
 ## Execution tickets (active ones live in docs/ticket/; completed archived at docs/archive/ticket/)
 - M0: 0001 (spec) + 0002–0004 (execution) — complete
@@ -163,15 +164,29 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   + `M4_INFO`/`M2_OK` logs green dev+release, ctest 8/8; xprop titles + user-confirmed smoke)
 
 ### M4 (post-close cleanup; in docs/ticket/)
-- 0025 (M4 code cleanup, narrowed after strict re-review) — `ready-for-agent`, no blocker,
-  independent of M5, under a top-level invariant that no externally observable M4 behaviour or
-  established architecture contract may change: ① extract CLI parsing → `src/app/cli_options` + headless `Options`-content
-  tests (P1), ④ flatten `run()`'s GL scope into `renderScene()` (P2), ② verify the existing
-  uniform-location cache (verification-only), ③ audit the `loadManifestOnly()` seam without
-  removing/`#ifdef`-gating it (it backs production `--list-assets`, 0017), ⑤ record the
-  asset→renderer PUBLIC GL coupling as deferred, ⑧ record the actual CMake target graph. Explicitly
-  does **not** remove public APIs, add test-only build conditionals, split libraries, or pre-design
-  M5 features
+- 0025 (M4 code cleanup, narrowed after strict re-review) — **complete, archived**
+  (`docs/archive/ticket/0025-m4-code-cleanup.md`), under a top-level invariant that no externally
+  observable M4 behaviour or established architecture contract changed (held):
+  - ① CLI parsing now lives in `src/app/cli_options.{hpp,cpp}` as `noto3d::app::Options` +
+    `parseOptions()`, unit-tested headlessly by `tests/app/cli_options_test.cpp` (12 blocks /
+    40 checks on `Options` **content**; CTest `app-cli-parse-contract`, suite 14→15) — the CLI
+    contract no longer needs a forked subprocess. Parsing is a pure syntax contract: `--asset` +
+    `--demo` exclusion stays pre-GL in `main()`, unknown-asset validation stays in the registry
+    layer, and the existing optional/flag shape was kept (no mode enum).
+  - ④ `run()`'s bare `{ ... }` block became `int renderScene(GLFWwindow*, const Options&)`; the
+    GL-owning objects (shader, registry → Mesh/Texture, renderer, camera) are locals of the helper
+    and die with it while the context is current, making that lifetime rule (ticket 0012) structural.
+    `run()` keeps only the GLFW lifecycle.
+  - ② the 0011⑩ uniform-location cache was verified (hit → no `glGetUniformLocation`; miss → query
+    + store; cache cleared whenever the program handle is invalidated — there is no `reload()`) and
+    left byte-identical.
+  - ③ `loadManifestOnly()` is a public **production** API (backing `--list-assets`, 0017/ADR-0009)
+    plus the CPU-only path used by asset tests; removal / `testing`-namespace / `#ifdef` gating
+    rejected. The CPU/GPU restructuring question is handed to 0027.
+  - ⑤ `noto3d_asset` → `noto3d_renderer` stays **PUBLIC** (0027 owns it); ⑧ the real CMake target
+    graph is recorded in the ticket (no overshoot fixed).
+  - Verification: red-first TDD, ctest **15/15 dev + release**, 0024 exit-code matrix and
+    `xprop` titles unchanged.
 - 0026 (M5 input & interaction config follow-ups) — deferred to M5: cursor-baseline reset semantics
   (firstMove is cursor-ownership, not scene lifecycle) + camera interaction sensitivity config
   owned by the app/input layer — **not** `renderer::Camera` (ADR-0010 Q7 purity preserved)

@@ -11,7 +11,7 @@ picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-en
 - **Docs hierarchy:** `docs/CONTEXT.md` = current implementation truth; `docs/adr/` = decision
   history (+ embedded milestone specs); `docs/DEFINITION.md` = project vocabulary;
   `docs/CHANGELOG.md` = milestone history; `docs/archive/ticket/` = all execution tickets
-  (complete); `docs/ticket/` = pending (0025 M4 code cleanup; 0026/0027 deferred follow-ups).
+  (complete); `docs/ticket/` = pending (0026/0027 deferred follow-ups).
 
 ## Status
 
@@ -22,7 +22,7 @@ picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-en
 | **M1** | Minimal renderer (0005–0007) | ✅ complete — Mesh upload, Material/shader/first draw, pass hygiene |
 | **M2** | Asset pipeline (0008–0014) | ✅ complete — `AssetRegistry` + OBJ/MTL→Mesh, sRGB diffuse texture pipeline + E2E demo render, demo fixture, texture path safety |
 | **M3** | Noto vertical slice (0015–0018) | ✅ complete — fixture frozen (manifest-integrity contract test, ctest 5/5), selection diagnostics (`M3_INFO` identity line, dynamic title, `--list-assets`), human category verification |
-| **M4** | Scene composition & transform (0020–0024) | ✅ complete — pure-data Scene + draw-list seam + multi-entity runtime + orbit/zoom/pan camera; automated matrix + xprop titles + smoke (ctest 8/8), 0025 code-cleanup pass open |
+| **M4** | Scene composition & transform (0020–0024) | ✅ complete — pure-data Scene + draw-list seam + multi-entity runtime + orbit/zoom/pan camera; automated matrix + xprop titles + smoke; 0025 code-cleanup pass complete (ctest 15/15) |
 
 ### Completed tickets (`docs/archive/ticket/`)
 
@@ -37,9 +37,8 @@ picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-en
   predicate), 0012 app/renderer separation + registry integration, 0010 dependency pinning
 - **0011** M1 code-quality deferred findings (⑦⑧⑨⑩) — folded into 0012
 
-Active M4 tickets (0020–0024) are complete and archived; 0025 (M4 code cleanup,
-`ready-for-agent`) and the deferred 0026/0027 follow-ups live in `docs/ticket/`. All execution
-history lives under `docs/archive/ticket/`. Next roadmap milestone:
+M4 tickets (0020–0025) are complete and archived; only the deferred 0026/0027 follow-ups
+live in `docs/ticket/`. All execution history lives under `docs/archive/ticket/`. Next roadmap milestone:
 **M5 ImGui Editor**.
 
 ## Build & test
@@ -92,9 +91,6 @@ texture ref promotes the asset to `LOADED_WITH_WARNINGS` (geometry still renders
 
 1. **M5 ImGui editor** (overlay owns its GL state; ADR-0005 handoff point =
    `Renderer::End3DPass()`; `lib/imgui` already fetched) — next milestone.
-2. **0025 code-cleanup pass** (ready-for-agent, independent of M5): ① CLI parsing →
-   `src/app/cli_options` + headless `Options`-content tests (P1), ④ flatten `run()` GL scope (P2),
-   ② verify uniform cache, ③ audit `loadManifestOnly()` without removing/`#ifdef`-gating it,
-   ⑧ record CMake target graph. Deferred to follow-ups: **0026** M5 input/interaction config
-   (cursor baseline, sensitivity ownership), **0027** asset CPU/GPU boundary spike.
+2. **Deferred follow-ups** (independent of the M5 core work): **0026** M5 input/interaction
+   config (cursor baseline, sensitivity ownership), **0027** asset CPU/GPU boundary spike.
 3. **M6 Save/Load** — Scene JSON as a complete snapshot (forward contract in ADR-0010 Q4).

@@ -273,6 +273,7 @@ add_test(NAME scene-entity-contract COMMAND noto3d-scene-tests)
 # Application library (ADR-0008/0010): app-layer orchestration, no GL state
 # ---------------------------------------------------------------------------
 add_library(noto3d_app STATIC
+    src/app/cli_options.cpp
     src/app/draw_list.cpp)
 target_include_directories(noto3d_app PUBLIC
     ${CMAKE_SOURCE_DIR}/src/app)
@@ -286,6 +287,22 @@ target_link_libraries(noto3d-app-tests PRIVATE noto3d_app noto3d_core)
 noto3d_set_warnings(noto3d-app-tests)
 noto3d_apply_sanitizers(noto3d-app-tests)
 add_test(NAME app-draw-list-seam COMMAND noto3d-app-tests)
+
+# Ticket 0025 — CLI contract verified in-process (Options content, not just
+# exit codes); the binary-level CLI matrix below stays as the end-to-end check.
+# Parsing is a pure syntax contract (0025 ①): link noto3d_core only and compile the
+# TU directly, so this suite needs no GL — it must not reach glad through
+# noto3d_app's renderer::Model type dependency. The built binary stays covered
+# end-to-end by the cli-* CTest matrix below.
+add_executable(noto3d-cli-options-tests
+    tests/app/cli_options_test.cpp
+    src/app/cli_options.cpp)
+target_include_directories(noto3d-cli-options-tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/app)
+target_link_libraries(noto3d-cli-options-tests PRIVATE noto3d_core)
+noto3d_set_warnings(noto3d-cli-options-tests)
+noto3d_apply_sanitizers(noto3d-cli-options-tests)
+add_test(NAME app-cli-parse-contract COMMAND noto3d-cli-options-tests)
 
 # ---------------------------------------------------------------------------
 # Application
