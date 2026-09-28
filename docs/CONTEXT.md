@@ -189,8 +189,9 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
       choice) → 0033 (M5 close: matrix + manual docking smoke, blocks on 0030 + 0032).
         **0034** (viewport/input contract hardening: `contains()`'s reserved role + gate-read
         ordering) is blocked by 0028, runs docs-only, and does not block the M5 close.
-        **0035** (declaration-only conformance: 8 remaining implicit-inline accessors in
-        `renderer`/`ui` headers — 2 of them dead and deleted outright) is code-quality, independent
+        **0035** (declaration-only conformance: 10 remaining inline definitions — 8 implicit-inline
+        accessors in `renderer`/`ui` headers + 2 free `inline` conversions added by 0030's
+        `transform_edit.hpp`; 2 of the 10 are dead and deleted outright) is code-quality, independent
         of the M5 chain, and does **not** block 0030.
 
 ## Execution tickets (active ones live in docs/ticket/; completed archived at docs/archive/ticket/)

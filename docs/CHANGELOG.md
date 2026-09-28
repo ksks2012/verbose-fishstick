@@ -34,13 +34,20 @@
   needs a real pointer, and a selection click makes `IsAnyItemActive()` true, which closes the
   camera gate for that frame; that interaction is currently unverified.
 - **Raised — 0035 (declaration-only conformance).** ADR-0008 requires headers to carry declarations
-  only. Eight class-body accessor definitions still violate it: `camera.hpp` (4), `mesh.hpp` (2),
-  `texture.hpp` (1), `panel_render.hpp` (1). Two of them — `Texture::id()` and
-  `PanelViewport::active()` — have zero call sites and are to be deleted rather than moved. Six are
-  pre-existing renderer code; one came from 0028's `src/ui/` extraction. The verification note in
+  only. Ten definitions still violate it: `camera.hpp` (4), `mesh.hpp` (2), `texture.hpp` (1),
+  `panel_render.hpp` (1), `transform_edit.hpp` (2). Two of them — `Texture::id()` and
+  `PanelViewport::active()` — have zero call sites and are to be deleted rather than moved. Seven are
+  pre-existing renderer code; one came from 0028's `src/ui/` extraction; two came with 0030's
+  `transform_edit.hpp`. The verification note in
   ticket 0028 claiming "all headers are declaration-only" is **false** and is corrected via 0035;
   it was produced by a keyword-based grep that cannot see implicitly-inline member definitions.
   Independent of the M5 chain; does not block 0030.
+- **Corrected — "0 warnings" claim in 0028/0029 sites.** A full clean rebuild (incremental builds
+  never re-emit an already-compiled file's warnings) exposes **one** warning from `a05e852`
+  (0028): `main.cpp:227` ignored the `[[nodiscard]]` result of
+  `ui::installGlDebugCallback()`. Fixed by an explicit `static_cast<void>` plus a comment
+  documenting why it is safe to discard: the callee self-reports, and in a release build `false`
+  means "debug GL never requested", not failure. Verified gone on full dev + release rebuilds.
 - **Open — deviation from ADR-0011 Q5.** The 0028 implementation put `src/ui/` in a new
   `noto3d_ui` static library, but Q5 states those sources compile into the existing `noto3d-editor`
   executable and rejects a separate library for M5 (the adapter needs a display and a GL context, so
