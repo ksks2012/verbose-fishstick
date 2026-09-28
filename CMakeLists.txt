@@ -275,6 +275,7 @@ add_test(NAME scene-entity-contract COMMAND noto3d-scene-tests)
 # ---------------------------------------------------------------------------
 # Declaration-only headers: every implementation lives in a .cpp (project rule).
 add_library(noto3d_app STATIC
+    src/app/asset_picker.cpp
     src/app/camera_input.cpp
     src/app/cli_options.cpp
     src/app/draw_list.cpp
@@ -284,8 +285,11 @@ add_library(noto3d_app STATIC
     src/app/viewport_rect.cpp)
 target_include_directories(noto3d_app PUBLIC
     ${CMAKE_SOURCE_DIR}/src/app)
+# noto3d_asset is linked by ticket 0031 (the sanctioned edge promotion: the
+# M5 asset picker's snapshot is built by the app layer from the registry).
+# Still no ImGui/GLFW (ADR-0011 Q5): noto3d_asset is GLFW-free, headless-testable.
 target_link_libraries(noto3d_app
-    PUBLIC  noto3d_scene noto3d_renderer)
+    PUBLIC  noto3d_scene noto3d_renderer noto3d_asset)
 noto3d_set_warnings(noto3d_app)
 noto3d_apply_sanitizers(noto3d_app)
 
@@ -306,6 +310,12 @@ target_link_libraries(noto3d-transform-edit-tests PRIVATE noto3d_app noto3d_core
 noto3d_set_warnings(noto3d-transform-edit-tests)
 noto3d_apply_sanitizers(noto3d-transform-edit-tests)
 add_test(NAME app-transform-edit COMMAND noto3d-transform-edit-tests)
+
+add_executable(noto3d-asset-picker-tests tests/app/asset_picker_test.cpp)
+target_link_libraries(noto3d-asset-picker-tests PRIVATE noto3d_app noto3d_core)
+noto3d_set_warnings(noto3d-asset-picker-tests)
+noto3d_apply_sanitizers(noto3d-asset-picker-tests)
+add_test(NAME app-asset-picker COMMAND noto3d-asset-picker-tests)
 
 add_executable(noto3d-viewport-rect-tests
     tests/app/viewport_rect_test.cpp

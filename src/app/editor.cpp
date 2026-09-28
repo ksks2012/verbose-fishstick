@@ -61,6 +61,17 @@ bool Editor::setEntityTransform(scene::EntityId id, const scene::Transform& t) n
     return false;
 }
 
+bool Editor::setEntityAssetId(scene::EntityId id, std::string assetId) noexcept {
+    // Effect on the Scene is LIMITED to the entity's assetId (ADR-0011 Q1/Q7):
+    // no Model/Mesh/Texture/GPU-resource ownership is introduced here; runtime
+    // resolution of the new id stays in the collectDrawItems seam (ADR-0010 Q5).
+    if (auto* e = scene_.findEntity(id)) {
+        e->assetId = std::move(assetId);
+        return true;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Entity enumeration
 // ---------------------------------------------------------------------------

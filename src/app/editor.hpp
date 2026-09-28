@@ -35,6 +35,10 @@ public:
     bool setEntityRotation(scene::EntityId id, glm::vec3 rotationRad)     noexcept;
     bool setEntityScale   (scene::EntityId id, glm::vec3 scale)           noexcept;
     bool setEntityTransform(scene::EntityId id, const scene::Transform& t) noexcept;
+    // Reassigns the entity's assetId (M5 asset picker, ticket 0031).  The only
+    // effect is AssetId mutation: two entities on the same asset stay
+    // independent, and the Scene never names a Model/GPU object (ADR-0011 Q1).
+    bool setEntityAssetId(scene::EntityId id, std::string assetId) noexcept;
 
     // === Entity enumeration (value copy for UI; no span, no pointer) ========
     struct HierarchyItem {

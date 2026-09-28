@@ -4,6 +4,7 @@
 #endif
 #include <GLFW/glfw3.h>
 
+#include <asset_picker.hpp>
 #include <asset_registry.hpp>
 #include <camera.hpp>
 #include <camera_input.hpp>
@@ -104,6 +105,11 @@ int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
     if (!entry) {
         return EXIT_FAILURE;  // diagnostic already logged
     }
+
+    // Asset-picker per-selection state (ADR-0011 Q7): a VALUE snapshot rebuilt
+    // from the registry when the selection changes; emptied on deselect.
+    noto3d::scene::EntityId      lastPickerSelection = noto3d::scene::InvalidEntityId;
+    noto3d::app::AssetPickerSnapshot pickerSnapshot;
     glfwSetWindowTitle(window, entry->windowTitle.c_str());
 
     // ImGui is created here so its GL objects die while the context is current.
@@ -128,9 +134,26 @@ int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
         imgui->newFrame();
         dockLayout.submitDockHost();
 
+        // Asset-picker snapshot (ADR-0011 Q7): a VALUE snapshot rebuilt from
+        // the registry when the picker needs it — on a selection change, never
+        // per frame (Q8: no per-frame logging).  The UI freely keeps and sorts
+        // this value; it never holds a span into registry storage.  Empty while
+        // nothing is selected: the Inspector offers no picker then.
+        {
+            const auto sel = entry->editor.selectedId();
+            if (entry->editor.hasSelection() && sel != lastPickerSelection) {
+                lastPickerSelection = sel;
+                pickerSnapshot = noto3d::app::buildAssetPickerSnapshot(registry);
+            } else if (!entry->editor.hasSelection() && sel != lastPickerSelection) {
+                lastPickerSelection = sel;
+                pickerSnapshot = {};
+            }
+        }
+
         // Panels report the 3D panel's extent and the ownership inputs; the
         // panel submission order inside is itself a contract (ticket 0034 ②).
-        const noto3d::ui::ShellFrame shell = noto3d::ui::submitEditorPanels(window, entry->editor);
+        const noto3d::ui::ShellFrame shell =
+            noto3d::ui::submitEditorPanels(window, entry->editor, pickerSnapshot);
         viewState.rect = shell.rect;
 
         noto3d::ui::applyCameraInputForFrame(window, inputState, shell, viewState.camera);

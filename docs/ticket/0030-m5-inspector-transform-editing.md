@@ -1,7 +1,7 @@
 # 0030 — M5 Inspector: numeric transform editing in degrees, commit-on-release
 
 **Source:** ADR-0011 M5 spec (Q8 / Q13); third M5 slice, parallel to 0031.
-**Status:** ready-for-agent
+**Status:** implemented — machine-verified; manual evidence pending
 **Blocked by:** 0029
 
 The first slice that changes what the 3D view shows. Independent of 0031 (asset picker): this one

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <asset_picker.hpp>
 #include <editor.hpp>
 #include <viewport_rect.hpp>
 
@@ -35,7 +36,13 @@ struct ShellFrame {
 // Hierarchy and Inspector are empty placeholders in this slice.  When they gain
 // widgets, those widgets are submitted before the reads above precisely so they
 // arbitrate against the camera.
+//
+// picker is the app-layer value snapshot for the M5 asset picker (ADR-0011 Q7).
+// The UI holds and freely sorts this VALUE; it must never hold a std::span or
+// pointer into registry storage.  Pass the app-built snapshot through; do not
+// rebuild it here.
 [[nodiscard]] ShellFrame submitEditorPanels(GLFWwindow* window,
-                                            noto3d::app::Editor& editor);
+                                            noto3d::app::Editor& editor,
+                                            const noto3d::app::AssetPickerSnapshot& picker);
 
 }  // namespace noto3d::ui

@@ -85,6 +85,27 @@ int main() {
               "setEntityPosition: false for invalid id");
     }
 
+    // ── setEntityAssetId — thin assetId mutation, limited to that field ─────
+    {
+        Editor ed;
+        const auto id1 = ed.createEntity("smile", "smile");
+        const auto id2 = ed.createEntity("crown", "crown");
+        ed.setEntityPosition(id1, {1.0f, 2.0f, 3.0f});
+
+        check(ed.setEntityAssetId(id1, "warm"),
+              "setEntityAssetId: returns true for known id");
+        {
+            const auto items = ed.hierarchyItems();
+            check(items.size() == 2, "setEntityAssetId: entity count unchanged");
+            check(items[0].assetId == "warm",     "setEntityAssetId: assetId updated");
+            check(items[1].assetId == "crown",    "setEntityAssetId: other entity unaffected");
+        }
+        check(ed.setEntityAssetId(id2, "cool"),
+              "setEntityAssetId: second id also true");
+        check(!ed.setEntityAssetId(InvalidEntityId, "warm"),
+              "setEntityAssetId: false for invalid id");
+    }
+
     // ── selection basics ─────────────────────────────────────────────────────
     {
         Editor ed;

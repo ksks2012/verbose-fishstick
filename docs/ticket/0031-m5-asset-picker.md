@@ -1,7 +1,7 @@
 # 0031 — M5 asset picker: assign a renderable asset to an entity
 
 **Source:** ADR-0011 M5 spec (Q1 / Q7 / Q8); fourth M5 slice, parallel to 0030.
-**Status:** ready-for-agent
+**Status:** implemented — machine-verified; manual evidence pending
 **Blocked by:** 0029
 
 Delivers "selected something → I can change what it is". Independent of 0030 (transform editing):

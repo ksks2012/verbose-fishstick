@@ -1,8 +1,6 @@
 # CHANGELOG
 
-## [Unreleased] — M5 ImGui Editor (0028–0029 landed; manual evidence pending)
-
-## [Unreleased] — M5 ImGui Editor (0028–0029 landed; manual evidence pending)
+## [Unreleased] — M5 ImGui Editor (0028–0031 landed; 0030/0031 manual evidence pending)
 
 ### M5 — implemented (0028, 0029)
 - **0028 — editor shell, `ViewportRect`, input-ownership gate.** Docked host with the 3D view as a
@@ -54,6 +52,34 @@
   a new target "buys no verification"), with revisit gated on a second host — which does not exist.
   Recorded rather than papered over; see the 0028 ticket. Resolution is either folding the five
   `src/ui/` sources back into `noto3d-editor`, or an ADR-0011 amendment.
+
+### M5 — implemented (0030, 0031)
+- **0030 — Inspector numeric transform editing.** Inspector shows Pitch/Yaw/Roll (degrees) + scale
+  for the selected entity, applied in the scene's radians YXZ order (fields labelled by axis with
+  the applied order shown). The `Scene` stays radians; degrees are a presentation-layer conversion
+  whose source of truth is the scene value each frame, with the displayed precision authoritative on
+  commit (ADR-0011 Q13). Commits use `IsItemDeactivatedAfterEdit()` (continuous-widget commit
+  boundary, Q8) and log `M5_XFRM` on the event. Writes go through `app::Editor`'s EntityId-keyed
+  operations, so the four-input camera gate keeps arbitrating (widget-active release returns the
+  wheel to the camera on the same frame the editable goes inactive). Headless `app-transform-edit`
+  suite (was `app-editor-facade`-adjacent) covers degree/radian boundary values, display-precision
+  commitment, radians YXZ application order, scalar/vector commits and the `M5_XFRM` log lines
+  (position/rotation/scale), linking `noto3d_app noto3d_core` only.
+- **0031 — M5 asset picker.** Inspector `Asset` combo lists only drawable (renderable) assets for the
+  selected entity, rebuilt from the registry's asset list as a **value snapshot** when the selection
+  changes; the UI never holds a `std::span`/pointer into registry storage, and the identical 6-entry
+  run is normal (no cache/version token, Q7). Reference-only / geometry-less entries are hidden and
+  the hiding is observable: `M5_ASSET asset-picker n=<renderable> hidden=<reference-only>`. The
+  snapshot carries **typed** values (id + `GeometrySource`); display text lives in the UI adapter.
+  Choosing an entry commits through `commitAssetAssignment` → `Editor::setEntityAssetId` (the sole
+  Scene effect, `EntityId`-keyed `assetId` mutation, ADR-0011 Q1) and logs
+  `M5_ASSET asset-assigned entity='…' id=<n> assetId='…'` on the discrete selection event (never per
+  frame, Q8). The sanctioned `noto3d_app → noto3d_asset` edge promotion happens here (per the CMake
+  ownership comment). Headless `app-asset-picker` suite covers snapshot construction from a mixed
+  manifest (renderable + reference-only), typed choice tagging, panel creation, editing, and that
+  the effect on the Scene is limited to `assetId` (two entities on one asset stay independent; an
+  unresolvable id degrades to the existing skip-not-fail seam). Suites 18 → **20**; ctest 20/20 on
+  dev and release, 0 warnings on full rebuilds.
 
 ### M5 — editor architecture decided (grilling Q0–Q14; spec embedded in ADR-0011)
 - **M5 architecture accepted before any code** in **ADR-0011** (spec at the ADR layer per

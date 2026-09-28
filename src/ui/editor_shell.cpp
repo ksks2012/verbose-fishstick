@@ -12,8 +12,16 @@
 
 namespace noto3d::ui {
 
+// Display text for a typed geometry source — presentation work, done here in
+// the UI adapter from the snapshot's TYPED value (ADR-0011 Q7/Q13), never
+// pre-formatted by the app layer.
+const char* geometrySourceLabel(asset::GeometrySource source) {
+    return source == asset::GeometrySource::Placeholder ? "placeholder" : "official";
+}
+
 ShellFrame submitEditorPanels(GLFWwindow* window,
-                               noto3d::app::Editor& editor) {
+                               noto3d::app::Editor& editor,
+                               const noto3d::app::AssetPickerSnapshot& picker) {
     ShellFrame shell;
 
     // ── Hierarchy panel ──────────────────────────────────────────────────────
@@ -41,6 +49,34 @@ ShellFrame submitEditorPanels(GLFWwindow* window,
 
         ImGui::Text("Name:    %s", name    ? name->c_str()    : "(none)");
         ImGui::Text("AssetId: %s", assetId ? assetId->c_str() : "(none)");
+
+        // ── Asset picker (0031) ─────────────────────────────────────────
+        // Consumes the app-layer VALUE snapshot; display text is derived here
+        // (geometrySource → label), never held as a view into the registry.
+        // Discrete widget: commit (and its log) happen on the selection event.
+        ImGui::Separator();
+        if (picker.choices.empty()) {
+            ImGui::TextDisabled("(no renderable assets available)");
+        } else {
+            const char* preview = "?";
+            std::string previewBuf;
+            if (assetId) {
+                previewBuf = *assetId;
+                preview = previewBuf.c_str();
+            }
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::BeginCombo("Asset##picker", preview)) {
+                for (const auto& choice : picker.choices) {
+                    const std::string label =
+                        choice.id + " (" + geometrySourceLabel(choice.geometrySource) + ")";
+                    const bool isCurrent = assetId && *assetId == choice.id;
+                    if (ImGui::Selectable(label.c_str(), isCurrent)) {
+                        noto3d::app::commitAssetAssignment(editor, id, choice.id);
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
 
         if (transform) {
             const noto3d::scene::Transform& t = *transform;
