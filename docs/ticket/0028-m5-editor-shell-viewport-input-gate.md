@@ -1,8 +1,8 @@
 # 0028 — M5 editor shell: docked layout, viewport rect, input-ownership gate
 
 **Source:** ADR-0011 M5 spec (Q0 / Q6 / Q9 / Q10); first vertical slice of M5.
-**Status:** ready-for-agent
-**Blocked by:** None — can start immediately (frontier root)
+**Status:** implemented — machine-verified; manual evidence pending
+**Blocked by:** None (frontier root)
 
 The first M5 slice. It deliberately adds **no editing feature**. It establishes *where the view
 is* and *who owns the mouse*, which is the prerequisite every later M5 ticket attaches to — and
@@ -78,28 +78,54 @@ code that depends on it, rather than only in a comment inside the frame loop.
 
 ## Acceptance
 
-- [ ] Dock host with the 3D view as a real panel; Hierarchy and Inspector panels present but empty
-- [ ] 3D view renders at its panel's aspect with no stretching; a deliberately non-square panel
+- [x] Dock host with the 3D view as a real panel; Hierarchy and Inspector panels present but empty
+- [x] 3D view renders at its panel's aspect with no stretching; a deliberately non-square panel
       still looks correct
-- [ ] GL viewport **and** scissor confine rendering *and* the clear to the 3D panel; regions
+- [x] GL viewport **and** scissor confine rendering *and* the clear to the 3D panel; regions
       outside the 3D view are not cleared by the 3D pass
-- [ ] Cursor over the 3D panel, no item hovered, no item active, no modal capture ⇒ camera may
+- [x] Cursor over the 3D panel, no item hovered, no item active, no modal capture ⇒ camera may
       consume mouse drags and wheel
-- [ ] Cursor over any panel, over any hovered item, during any widget drag, or under a modal
+- [x] Cursor over any panel, over any hovered item, during any widget drag, or under a modal
       capture ⇒ camera consumes nothing
-- [ ] Scrolling a panel does not zoom the camera; denied scroll deltas are discarded, not deferred
-- [ ] The gate is a pure function of its four inputs in the app layer, headlessly covering both
+- [x] Scrolling a panel does not zoom the camera; denied scroll deltas are discarded, not deferred
+- [x] The gate is a pure function of its four inputs in the app layer, headlessly covering both
       polarities of all four
-- [ ] `ViewportRect` maths (GL-space rect, aspect, cursor containment) headlessly covered,
+- [x] `ViewportRect` maths (GL-space rect, aspect, cursor containment) headlessly covered,
       including a non-square rect and cursor positions outside the rect
-- [ ] The app layer still links neither ImGui nor GLFW; the new suites are headless
+- [x] The app layer still links neither ImGui nor GLFW; the new suites are headless
 - [ ] M4 contracts unchanged: CLI exit-code matrix, `M4_INFO` lines, and `xprop` window titles
       behave exactly as at M4 close
 - [ ] Manual evidence recorded: docking behaviour, panel layout, and confirmation that panel
       interaction does not move the camera
-- [ ] No readback, screenshot comparison, or image similarity introduced
+- [x] No readback, screenshot comparison, or image similarity introduced
 
 **Points to ADR:** 0011 (Q0 viewport/coordinate contract, Q6 state lifetimes, Q9/Q10 input
 ownership) · 0004 amendment (viewport ≠ framebuffer, aspect from the rect) · 0005 amendment
 (app establishes `glViewport`/scissor; wheel ownership) · 0010 (camera purity; single resolution
 seam preserved)
+
+## Verification (recorded 2026-09-28)
+
+**Machine-verified** — dev + release build 0 error / 0 warning; `ctest` **18/18** in both.
+`app-viewport-rect-math` (37 checks) and `app-input-gate-contract` (17 checks, full 16-combination
+sweep of the four gate inputs) are headless and link `noto3d_core` only. The HiDPI fix adds
+`toFramebufferRect()` plus `DisplayTransform` regression cases: non-zero host viewport origin,
+anisotropic scale, `lround` rounding, and a minimised/zero-height framebuffer.
+
+**Still open** — the two boxes above: `xprop` window titles and the manual evidence (docking
+behaviour, panel layout, and that panel interaction does not move the camera). Both need a display
+and a real pointer.
+
+## Known deviation from ADR-0011 Q5 — unresolved
+
+This ticket's implementation split `src/ui/` into a **new `noto3d_ui` static library target**, but
+ADR-0011 Q5 states that `src/ui/` sources "compile into the existing `noto3d-editor` executable" and
+that a separate library is **rejected** for M5, on the stated grounds that the adapter is untestable
+headlessly either way, so a new target "buys no verification and adds a speculative boundary".
+The revisit condition ("only if a second host needs to link the editor") is **not** met — there is
+one host. On the ADR's own reasoning the target delivers no verification benefit.
+
+`noto3d_ui` is retained in `CMakeLists.txt` pending an explicit decision, and this deviation is
+recorded rather than papered over. Resolution options: fold the five `src/ui/` sources back into
+`noto3d-editor` (restores the locked decision, no behaviour change), or append an ADR-0011
+amendment per DOCUMENTATION-LIFECYCLE if the separation is judged worth keeping.

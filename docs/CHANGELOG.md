@@ -1,6 +1,44 @@
 # CHANGELOG
 
-## [Unreleased] — M5 ImGui Editor (architecture locked; no code yet)
+## [Unreleased] — M5 ImGui Editor (0028–0029 landed; manual evidence pending)
+
+## [Unreleased] — M5 ImGui Editor (0028–0029 landed; manual evidence pending)
+
+### M5 — implemented (0028, 0029)
+- **0028 — editor shell, `ViewportRect`, input-ownership gate.** Docked host with the 3D view as a
+  real panel; one plain-data framebuffer-space `ViewportRect` as the single source of view extent;
+  a four-input app-layer gate (`viewportHovered && !IsAnyItemHovered() && !IsAnyItemActive() &&
+  !globalModalCapture`) covering the wheel as well. Headless suites `app-viewport-rect-math`
+  (37 checks) and `app-input-gate-contract` (17 checks, full 16-combination sweep) link
+  `noto3d_core` only. Manual docking evidence still pending.
+- **HiDPI correction.** The first viewport conversion built GL coordinates from ImGui screen
+  pixels plus framebuffer height, silently ignoring display scale and viewport origin. Fixed with
+  `toFramebufferRect(ScreenRect, DisplayTransform)`; scale is derived from the GLFW
+  framebuffer/window ratio because the GLFW backend reports `DisplayFramebufferScale` as `1.0` on
+  X11. Regression cases cover non-zero host origin, anisotropic scale, `lround` rounding, and a
+  zero-height (minimised) framebuffer.
+- **0029 — Hierarchy, selection, `Editor` facade.** `app::Editor` owns the `Scene` **by value** and
+  is the sole UI write path: its public API returns no mutable `Scene&`, no `Entity*` and no entity
+  span, so the Q3 `EntityId`-only rule is a type boundary rather than a convention. Selection is
+  editor-session state (`EntityId`, re-resolved per frame) held separately from the per-view
+  `ViewportState` and per-frame `InputState` (Q6). Structural mutations clear a stale selection
+  explicitly. Headless `app-editor-facade` suite, 52 checks, links `noto3d_app noto3d_core` only.
+  Rendering remains the single `collectDrawItems(editor.scene(), resolver)` seam.
+- **Structural pass.** `main.cpp` reduced 611 → 256 lines by extracting `src/app/viewport_rect`,
+  `src/app/input_gate`, `src/app/camera_input` (ImGui-free logic) and the CLI→Scene entry model,
+  plus presentation/input adaptation under `src/ui/`. All headers are declaration-only — every
+  definition lives in a `.cpp`. M4 contracts re-verified unchanged: `M4_INFO` for all three entry
+  modes and the six CLI exit-code cases.
+- **ctest 18/18 on dev and release**, 0 compiler warnings in our own code both ways.
+- **Open:** manual evidence for both tickets. For 0029 this is not a formality — `ImGui::Selectable`
+  needs a real pointer, and a selection click makes `IsAnyItemActive()` true, which closes the
+  camera gate for that frame; that interaction is currently unverified.
+- **Open — deviation from ADR-0011 Q5.** The 0028 implementation put `src/ui/` in a new
+  `noto3d_ui` static library, but Q5 states those sources compile into the existing `noto3d-editor`
+  executable and rejects a separate library for M5 (the adapter needs a display and a GL context, so
+  a new target "buys no verification"), with revisit gated on a second host — which does not exist.
+  Recorded rather than papered over; see the 0028 ticket. Resolution is either folding the five
+  `src/ui/` sources back into `noto3d-editor`, or an ADR-0011 amendment.
 
 ### M5 — editor architecture decided (grilling Q0–Q14; spec embedded in ADR-0011)
 - **M5 architecture accepted before any code** in **ADR-0011** (spec at the ADR layer per

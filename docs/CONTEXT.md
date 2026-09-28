@@ -14,7 +14,7 @@ C++/OpenGL editor MVP for Noto 3D-style emoji composition ("emoji_editor").
 ## Current milestone
 M4 Scene Composition & Transform **complete** (0020–0024) and its post-close **0025 code-cleanup
 pass complete** (0020–0025 archived). **M5 ImGui Editor has an accepted architecture (ADR-0011,
-grilling Q0–Q14) and its execution tickets are written (0028–0034; 0028 implemented, manual
+grilling Q0–Q14) and its execution tickets are written (0028–0034; 0028 + 0029 implemented, manual
 evidence pending)**. M0
 (Environment/build),
 M0.5 (Asset contract spike), M1 (minimal renderer + pass hygiene), M2 (0008 → 0014 → 0009 → 0013 +
@@ -136,7 +136,7 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   matrix (exit codes + structured runtime-log / `entities=<N>` assertions) + manual evidence
   (xprop `WM_NAME` titles, visual smoke); no readback/similarity.
 - ADR-0011: M5 editor architecture (grilling Q0–Q14, locked; **execution tickets 0028–0034 written;
-  0028 implemented, manual evidence pending**). Docked layout; one explicit framebuffer-space `ViewportRect` (plain data,
+    0028 and 0029 implemented, machine-verified, manual evidence pending for both**). Docked layout; one explicit framebuffer-space `ViewportRect` (plain data,
   no ImGui types) as the single source of view extent, driving projection aspect, cursor
   window→viewport-local mapping + containment, and the app-established `glViewport`/scissor before
   the 3D pass (`Begin3DPass()` stays UI-agnostic; ADR-0005 amended; ADR-0004 amended since
@@ -182,8 +182,9 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
 - [x] M4 scene composition (ADR-0010; 0020–0024) — **complete**, archived.
 - [x] 0025 M4 code-cleanup pass — **complete**, archived (independent of M5).
 - [ ] M5 ImGui editor — architecture **locked in ADR-0011** (Q0–Q14); execution tickets **0028–0034
-      written; 0028 implemented, manual evidence pending**. 0028 = docked shell + `ViewportRect` + input-ownership gate (frontier
-      root; 0026 attaches to it) → 0029 = Hierarchy + selection + `Editor` facade → 0030 (transform
+        written; 0028 + 0029 implemented and machine-verified (ctest 18/18 dev + release), manual
+        evidence pending for both**. 0028 = docked shell + `ViewportRect` + input-ownership gate (frontier
+        root; 0026 attaches to it) → 0029 = **done**: Hierarchy + selection + `Editor` facade → 0030 (transform
       editing) and 0031 (asset picker) in parallel → 0032 (create/destroy, needs 0031's asset
       choice) → 0033 (M5 close: matrix + manual docking smoke, blocks on 0030 + 0032).
       **0034** (viewport/input contract hardening: `contains()`'s reserved role + gate-read

@@ -39,11 +39,13 @@ picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-en
 
 M4 tickets (0020–0025) are complete and archived. **M5's architecture is locked in ADR-0011**
 (docked editor layout, `ViewportRect`, `Editor`-owns-`Scene` facade, input-ownership gate); M5
-execution tickets are not written yet, so the only pending tickets are **0026** (M5 camera
-interaction semantics & cursor baseline, blocked by the first slice's input gate) and **0027**
-(M6-preceding asset CPU/GPU boundary gate). All completed execution history lives under
-`docs/archive/ticket/`. Next roadmap milestone:
-**M5 ImGui Editor**.
+execution tickets are written as **0028–0034**; **0028** and **0029** are implemented and
+  machine-verified, with manual evidence still pending for both. The remaining M5 chain is
+  **0030** (Inspector transform editing) → **0031** (asset picker) → **0032** (entity
+  create/destroy) → **0033** (integration regression); **0026** (M5 camera interaction semantics
+  & cursor baseline) and **0027** (M6-preceding asset CPU/GPU boundary gate) are the pending
+  side-tickets. All completed execution history lives under `docs/archive/ticket/`.
+  Current milestone: **M5 ImGui Editor**.
 
 ## Build & test
 
@@ -52,10 +54,14 @@ Machine prereq (one-time): `sudo apt install libxinerama-dev libxcursor-dev libx
 ```bash
 cmake --preset dev                      # configure (Debug + sanitizer option)
 cmake --build build/dev -j               # build
-ctest --test-dir build/dev               # headless tests (5 suites)
+ctest --test-dir build/dev               # headless tests (18 suites)
 build/dev/noto3d-editor --frames=5       # non-interactive smoke: prints M0_OK / M1_DONE
 build/dev/noto3d-editor                  # interactive window
 ```
+
+Structured-log prefixes: `M0_OK` (context/capability), `M1_OK` / `M1_DONE` (renderer, frame
+completion), `M2_*` (mesh/texture), `M3_INFO` (asset identity), `M4_INFO` (scene about to render),
+and `M5_SEL` (entity selection, ADR-0011 Q8 — logs `entity='<name>' id=<n>`).
 
 Presets: `dev` (Debug + sanitizer/debug-GL options), `dev-clean`, `release`. Our own code builds
 with `-Wall -Wextra -Wpedantic`; `-Werror` is opt-in (ADR-0008).
@@ -96,8 +102,9 @@ texture ref promotes the asset to `LOADED_WITH_WARNINGS` (geometry still renders
 1. **M5 ImGui editor** (overlay owns its GL state; ADR-0005 handoff point =
    `Renderer::End3DPass()`; `lib/imgui` already fetched) — next milestone. Architecture accepted in
    **ADR-0011** (docked layout, explicit `ViewportRect`, `Editor` owning the `Scene`, input-ownership
-   gate incl. the wheel); execution tickets **0028–0034** written; 0028 implemented, manual
-   evidence pending.
+   gate incl. the wheel); execution tickets **0028–0034** written; **0028** (shell + `ViewportRect`
+   + input gate) and **0029** (Hierarchy + selection + `Editor` facade) implemented and
+   machine-verified, manual evidence pending for both.
 2. **Pending follow-ups**: **0026** M5 camera interaction semantics & cursor baseline (M5-adjacent;
    blocked by 0028, does **not** block the M5 close), **0027** asset CPU/GPU boundary gate
    (**before M6**; premise corrected — the boundary already exists, what remains is header/type
