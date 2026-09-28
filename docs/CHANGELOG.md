@@ -4,7 +4,7 @@
 
 ### M5 — editor architecture decided (grilling Q0–Q14; spec embedded in ADR-0011)
 - **M5 architecture accepted before any code** in **ADR-0011** (spec at the ADR layer per
-  DOCUMENTATION-LIFECYCLE; M5 execution tickets not yet written, so nothing here is a behaviour
+  DOCUMENTATION-LIFECYCLE; the M5 execution tickets are **0028–0033** and nothing here is a behaviour
   change). Decisions locked:
   - **Viewport geometry (Q0)** — docked layout; one explicit framebuffer-space `ViewportRect` as
     plain data (no ImGui types) and the single source of view extent. It drives projection aspect,
@@ -77,6 +77,13 @@
   is header/type coupling (`AssetRegistry` exposes `renderer::Model*` and caches a `Texture`). M5
   binding invariant: no new `Model`/`Mesh`/`Texture`/GPU ownership; asset editing mutates a stable
   `assetId` string only.
+- **Execution tickets 0028–0033 derived from ADR-0011** (tracer bullets, each independently
+  demoable, with declared blocking edges): 0028 docked shell + `ViewportRect` + input-ownership gate
+  (frontier root) → 0029 Hierarchy + selection + `Editor` facade → **0030** Inspector transform
+  editing and **0031** asset picker in parallel → 0032 create/destroy (needs 0031's asset choice,
+  rather than a "first renderable" default) → 0033 M5 close (matrix + manual docking smoke, blocked
+  by 0030 + 0032). 0026 is re-gated onto 0028 as **M5-adjacent and not blocking the close**.
+  No M5 code has been written.
 - CONTEXT.md updated in the same change.
 
 ## [Unreleased] — M4 Scene Composition & Transform (complete; 0025 cleanup pass complete)

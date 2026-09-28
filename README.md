@@ -96,9 +96,9 @@ texture ref promotes the asset to `LOADED_WITH_WARNINGS` (geometry still renders
 1. **M5 ImGui editor** (overlay owns its GL state; ADR-0005 handoff point =
    `Renderer::End3DPass()`; `lib/imgui` already fetched) — next milestone. Architecture accepted in
    **ADR-0011** (docked layout, explicit `ViewportRect`, `Editor` owning the `Scene`, input-ownership
-   gate incl. the wheel); execution tickets not yet written.
-2. **Pending follow-ups**: **0026** M5 camera interaction semantics & cursor baseline (active in M5,
-   blocked by the first slice's input-ownership gate — it no longer owns input ownership),
-   **0027** asset CPU/GPU boundary gate (**before M6**; premise corrected — the boundary already
-   exists, what remains is header/type coupling).
+   gate incl. the wheel); execution tickets **0028–0033** written, not started.
+2. **Pending follow-ups**: **0026** M5 camera interaction semantics & cursor baseline (M5-adjacent;
+   blocked by 0028, does **not** block the M5 close), **0027** asset CPU/GPU boundary gate
+   (**before M6**; premise corrected — the boundary already exists, what remains is header/type
+   coupling).
 3. **M6 Save/Load** — Scene JSON as a complete snapshot (forward contract in ADR-0010 Q4).

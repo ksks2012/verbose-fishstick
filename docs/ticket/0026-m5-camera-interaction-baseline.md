@@ -1,10 +1,11 @@
 # 0026 — M5 camera interaction semantics & cursor baseline
 
 **Source:** code review of 0021–0024 (items ⑥⑦), split out of 0025 in the Sep 2026 re-review.
-**Status:** active in M5 — **blocked by the first M5 slice's input-ownership gate**
-**Blocked by:** ADR-0011 Q9/Q10 — the first slice lands viewport containment + ImGui item
-arbitration + wheel gating. This ticket defines camera *semantics and baselines underneath that
-gate*; it does not re-decide input ownership.
+**Status:** Active (M5-adjacent; does not block 0033)
+**Blocked by:** 0028 — the first M5 slice, which delivers the input-ownership gate this ticket
+attaches to. (This ticket does **not** block the M5 close: ADR-0011 puts full camera interaction
+semantics in Out of Scope, so 0033 closes on "can I edit a Scene with the mouse", not on camera
+feel.)
 **Points to ADR:** 0011 (Q9/Q10 gate, Q6 `ViewportState` owns the `Camera`) · 0010 (Q7 camera
 purity) · 0005 (ImGui pass handoff, wheel ownership)
 
