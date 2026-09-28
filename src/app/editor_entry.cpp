@@ -64,7 +64,7 @@ std::optional<EntryScene> buildEntryScene(const Options& opts, asset::AssetRegis
             NOTO3D_WARN("M2_WARN  demo_checker fixture rendered WITHOUT "
                         "a diffuse texture");
         }
-        entry.scene.createEntity("demo_checker", "demo_checker");  // identity transform
+        entry.editor.createEntity("demo_checker", "demo_checker");  // identity transform
         entry.sceneName = "demo_checker";
         entry.resolve = [demoPtr](const std::string& id) -> const renderer::Model* {
             return (id == "demo_checker") ? demoPtr : nullptr;
@@ -80,7 +80,7 @@ std::optional<EntryScene> buildEntryScene(const Options& opts, asset::AssetRegis
         }
         NOTO3D_INFO("M3_INFO  selected asset '{}' geometry={} reference={}",
                     entryPtr->id, geometrySourceName(*entryPtr), referenceName(*entryPtr));
-        entry.scene.createEntity(entryPtr->id, entryPtr->id);  // identity transform
+        entry.editor.createEntity(entryPtr->id, entryPtr->id);  // identity transform
         entry.sceneName = entryPtr->id;
         entry.resolve = [&registry](const std::string& id) -> const renderer::Model* {
             return registry.model(id);
@@ -91,10 +91,8 @@ std::optional<EntryScene> buildEntryScene(const Options& opts, asset::AssetRegis
     } else {
         // Default: m4_vertical_scene — 3 entities spread on the X axis.
         const auto addAt = [&entry](const std::string& assetId, float x) {
-            const auto eid = entry.scene.createEntity(assetId, assetId);
-            if (auto* e = entry.scene.findEntity(eid)) {
-                e->transform.position = {x, 0.0f, 0.0f};
-            }
+            const auto eid = entry.editor.createEntity(assetId, assetId);
+            entry.editor.setEntityPosition(eid, {x, 0.0f, 0.0f});
         };
         addAt("smile",     -1.5f);
         addAt("crown",      0.0f);
@@ -108,7 +106,7 @@ std::optional<EntryScene> buildEntryScene(const Options& opts, asset::AssetRegis
 
     // Structured log — 0024's automated matrix asserts on this line.
     NOTO3D_INFO("M4_INFO rendering scene '{}' entities={}",
-                entry.sceneName, static_cast<int>(entry.scene.entities().size()));
+                entry.sceneName, static_cast<int>(entry.editor.entityCount()));
 
     return entry;
 }

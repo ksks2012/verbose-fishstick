@@ -3,7 +3,7 @@
 #include <asset_registry.hpp>
 #include <cli_options.hpp>
 #include <draw_list.hpp>
-#include <scene.hpp>
+#include <editor.hpp>
 
 #include <optional>
 #include <string>
@@ -17,7 +17,7 @@ namespace noto3d::app {
 // executable rather than into noto3d_app.  Promoting it into the app library is
 // a target-graph change, which tickets 0027 / 0031 own — not this file.
 struct EntryScene {
-    scene::Scene scene;
+    app::Editor  editor;     // owns the Scene by value (ADR-0011 Q11)
     Resolver     resolve;
     // Scene identity, as logged by the M4_INFO line that 0024's matrix asserts
     // on.  Distinct from windowTitle, which is decorated with the asset's

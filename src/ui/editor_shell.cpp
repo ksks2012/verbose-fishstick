@@ -11,15 +11,32 @@
 
 namespace noto3d::ui {
 
-ShellFrame submitEditorPanels(GLFWwindow* window) {
+ShellFrame submitEditorPanels(GLFWwindow* window,
+                               noto3d::app::Editor& editor) {
     ShellFrame shell;
 
-    // ── Hierarchy panel (empty placeholder) ─────────────────────────────────
+    // ── Hierarchy panel ──────────────────────────────────────────────────────
+    // Lists entities in creation order; click-to-select (ADR-0011 Q3/Q11).
     ImGui::Begin("Hierarchy");
+    for (const auto& item : editor.hierarchyItems()) {
+        const bool isSelected = (item.id == editor.selectedId());
+        if (ImGui::Selectable(item.name.c_str(), isSelected)) {
+            editor.select(item.id);
+        }
+    }
     ImGui::End();
 
-    // ── Inspector panel (empty placeholder) ────────────────────────────────
+    // ── Inspector panel ─────────────────────────────────────────────────────
+    // Shows selected entity's identity; no field editing (0030's job).
     ImGui::Begin("Inspector");
+    if (editor.hasSelection()) {
+        const auto name    = editor.selectedName();
+        const auto assetId = editor.selectedAssetId();
+        ImGui::Text("Name:    %s", name    ? name->c_str()    : "(none)");
+        ImGui::Text("AssetId: %s", assetId ? assetId->c_str() : "(none)");
+    } else {
+        ImGui::TextDisabled("(nothing selected)");
+    }
     ImGui::End();
 
     // ── Input-ownership inputs ─────────────────────────────────────────────

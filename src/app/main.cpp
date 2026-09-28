@@ -130,13 +130,13 @@ int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
 
         // Panels report the 3D panel's extent and the ownership inputs; the
         // panel submission order inside is itself a contract (ticket 0034 ②).
-        const noto3d::ui::ShellFrame shell = noto3d::ui::submitEditorPanels(window);
+        const noto3d::ui::ShellFrame shell = noto3d::ui::submitEditorPanels(window, entry->editor);
         viewState.rect = shell.rect;
 
         noto3d::ui::applyCameraInputForFrame(window, inputState, shell, viewState.camera);
 
         // Scissored + viewported to the panel rect; clears only inside it.
-        noto3d::ui::renderPanel3D(window, viewState, entry->scene, entry->resolve,
+        noto3d::ui::renderPanel3D(window, viewState, entry->editor.scene(), entry->resolve,
                                   renderer, baseShader);
 
         imgui->render();

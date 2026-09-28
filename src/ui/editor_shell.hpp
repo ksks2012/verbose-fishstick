@@ -1,5 +1,6 @@
 #pragma once
 
+#include <editor.hpp>
 #include <viewport_rect.hpp>
 
 struct GLFWwindow;
@@ -34,6 +35,7 @@ struct ShellFrame {
 // Hierarchy and Inspector are empty placeholders in this slice.  When they gain
 // widgets, those widgets are submitted before the reads above precisely so they
 // arbitrate against the camera.
-[[nodiscard]] ShellFrame submitEditorPanels(GLFWwindow* window);
+[[nodiscard]] ShellFrame submitEditorPanels(GLFWwindow* window,
+                                            noto3d::app::Editor& editor);
 
 }  // namespace noto3d::ui

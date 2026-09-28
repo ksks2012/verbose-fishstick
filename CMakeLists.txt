@@ -278,6 +278,7 @@ add_library(noto3d_app STATIC
     src/app/camera_input.cpp
     src/app/cli_options.cpp
     src/app/draw_list.cpp
+    src/app/editor.cpp
     src/app/input_gate.cpp
     src/app/viewport_rect.cpp)
 target_include_directories(noto3d_app PUBLIC
@@ -292,6 +293,12 @@ target_link_libraries(noto3d-app-tests PRIVATE noto3d_app noto3d_core)
 noto3d_set_warnings(noto3d-app-tests)
 noto3d_apply_sanitizers(noto3d-app-tests)
 add_test(NAME app-draw-list-seam COMMAND noto3d-app-tests)
+
+add_executable(noto3d-editor-tests tests/app/editor_test.cpp)
+target_link_libraries(noto3d-editor-tests PRIVATE noto3d_app noto3d_core)
+noto3d_set_warnings(noto3d-editor-tests)
+noto3d_apply_sanitizers(noto3d-editor-tests)
+add_test(NAME app-editor-facade COMMAND noto3d-editor-tests)
 
 add_executable(noto3d-viewport-rect-tests
     tests/app/viewport_rect_test.cpp
