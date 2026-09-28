@@ -27,3 +27,21 @@ misrepresents Noto reference colors later.
 ## Consequences
 - Single color pipeline (sRGB→linear→light→linear→framebuffer) from day one.
 - M1 screenshots remain consistent with M2/M3.
+
+## Amendment — viewport is not the framebuffer (2026-09-28, ADR-0011 Q0)
+
+The draw-loop clause above — "viewport from framebuffer size" — held for M1–M4 because the 3D view
+*was* the whole framebuffer. M5 introduces a docked editor, so that coincidence ends:
+
+- **The active GL viewport is the editor's 3D view rect**, not the framebuffer. The app layer
+  establishes `glViewport` (and the matching scissor box) from an explicit `ViewportRect` before
+  the 3D pass — see the ADR-0005 amendment.
+- **Projection aspect comes from the viewport rect** (`width / height`), not from the full
+  framebuffer size. A non-square viewport must not stretch the render.
+- **DPI handling is unchanged**: the swap is in framebuffer pixels, so the sRGB/DPI-safety intent of
+  the original clause is preserved. The rectangle simply is not the whole window anymore.
+- `glfwGetFramebufferSize` and the resize callback still drive the framebuffer size; they now feed
+  the framebuffer-space origin the `ViewportRect` is expressed in, rather than the viewport itself.
+
+Consequence: no GL capability, sRGB, MSAA, or initialization-order decision changes. This amendment
+only retires the assumption that viewport ≡ framebuffer.

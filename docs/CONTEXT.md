@@ -13,7 +13,8 @@ C++/OpenGL editor MVP for Noto 3D-style emoji composition ("emoji_editor").
 
 ## Current milestone
 M4 Scene Composition & Transform **complete** (0020–0024) and its post-close **0025 code-cleanup
-pass complete** (0020–0025 archived; 0026/0027 follow-ups deferred — all independent of M5). M0 (Environment/build),
+pass complete** (0020–0025 archived). **M5 ImGui Editor has an accepted architecture (ADR-0011,
+grilling Q0–Q14) but no code yet** — M5 execution tickets are not yet written. M0 (Environment/build),
 M0.5 (Asset contract spike), M1 (minimal renderer + pass hygiene), M2 (0008 → 0014 → 0009 → 0013 +
 0012/0011/0010) and M3 (0015 → 0016 → 0017 → 0018) are done and verified. Completed tickets are
 archived at `docs/archive/ticket/` (all 25). Working tree state:
@@ -39,10 +40,21 @@ archived at `docs/archive/ticket/` (all 25). Working tree state:
 - 0010 done: all six Git deps pinned by immutable SHA (each resolves to its release tag);
   no archive sources → `URL_HASH` n/a; dev + release configure/build + `ctest` green.
 
-Next on the roadmap: **M4 complete → M5 ImGui** (ADR-0005 ImGui-limitation note at the
-Renderer's `End3DPass()`; `lib/imgui` already fetched). Per DOCUMENTATION-LIFECYCLE, specs live at
-the ADR layer: the M3 spec is embedded in **ADR-0009**, the M4 spec in **ADR-0010**; `docs/ticket/`
-holds execution tickets only (currently the deferred 0026/0027 follow-ups), plus completed
+Next on the roadmap: **M5 ImGui Editor**. Its architecture is locked in **ADR-0011** (docked
+layout + explicit framebuffer-space `ViewportRect` driving aspect/cursor/`glViewport`/scissor;
+app-layer `Editor` **owns the `Scene` by value** and is the only mutation route, so the UI
+structurally cannot get a mutable `Scene&` or `Entity*`; ImGui-free editor logic in `noto3d_app`
+so it stays headless-testable; input ownership gate = `viewportHovered && !IsAnyItemHovered() &&
+!IsAnyItemActive() && !globalModalCapture`, with the wheel under the same gate —
+**`!io.WantCaptureMouse` must never be used as the viewport camera gate**, because the viewport is
+itself an ImGui window; transform editing is inspector-numeric in degrees while the `Scene` keeps
+radians YXZ). Named exclusions: undo/redo, gizmos/direct manipulation, and the asset CPU/GPU
+refactor. ADR-0004 and ADR-0005 were amended in the same change; ADR-0010 is unchanged.
+Per DOCUMENTATION-LIFECYCLE, specs live at
+the ADR layer: the M3 spec is embedded in **ADR-0009**, the M4 spec in **ADR-0010**, the M5 spec
+in **ADR-0011**; `docs/ticket/`
+holds execution tickets only (0026 is M5-active and blocked by the first slice's input gate; 0027
+is an M6-preceding gate), plus completed
 0020–0025 archived under accepted ADRs.
 M0 scope, user stories and acceptance matrix: `docs/archive/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
@@ -119,6 +131,38 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   0.5–20 independent of near/far, pan in world units, no Input abstraction). Close = automated
   matrix (exit codes + structured runtime-log / `entities=<N>` assertions) + manual evidence
   (xprop `WM_NAME` titles, visual smoke); no readback/similarity.
+- ADR-0011: M5 editor architecture (grilling Q0–Q14, locked; **no M5 code yet — execution tickets
+  not yet written**). Docked layout; one explicit framebuffer-space `ViewportRect` (plain data,
+  no ImGui types) as the single source of view extent, driving projection aspect, cursor
+  window→viewport-local mapping + containment, and the app-established `glViewport`/scissor before
+  the 3D pass (`Begin3DPass()` stays UI-agnostic; ADR-0005 amended; ADR-0004 amended since
+  viewport ≠ framebuffer). Editor: **`Editor` owns `Scene` by value** + `EditorState`, exposing
+  only `EntityId`-keyed semantic operations — the UI receives the facade and structurally cannot
+  obtain a mutable `Scene&`, `Entity*`, or span, so the `EntityId`-only write path is a type
+  boundary, not a convention; render path remains `collectDrawItems(editor.scene(), resolver)`
+  (single M4 resolution seam, borrowed `DrawItem::model` unchanged). Editor logic (selection,
+  edits, hierarchy, asset filtering, viewport geometry) is ImGui-free in `noto3d_app`
+  (links neither ImGui nor GLFW) so it stays headless-testable; `src/ui/` is presentation/input
+  adaptation only. State lifetimes split three ways: `EditorState` (session, selection),
+  `ViewportState` (per view: `Camera` + `ViewportRect`; one view ships, per-view shape),
+  `InputState` (per frame). Input ownership is a binary gate — `viewportHovered &&
+  !IsAnyItemHovered() && !IsAnyItemActive() && !globalModalCapture`, wheel under the same gate
+  with `NoScrollbar|NoScrollWithMouse` on the viewport; **non-obvious constraint: `!
+  io.WantCaptureMouse` must never be the viewport camera gate, because the viewport is itself an
+  ImGui window and that spelling kills camera input permanently**; camera semantics + cursor
+  baselines are 0026, not slice 1. Asset picker takes an app-built value snapshot (never a
+  `std::span` into registry storage; renderable-only, hidden counts logged). Observability via
+  the existing structured log, committed on `IsItemDeactivatedAfterEdit()` (continuous) / on event
+  (discrete); frozen `WM_NAME` title contract and the no-readback/similarity exclusion continue.
+  Transform editing is inspector-numeric only: `Scene` keeps radians YXZ, degrees are a
+  presentation-layer conversion, fields labelled `Pitch (X)`/`Yaw (Y)`/`Roll (Z)` with the applied
+  order Y→X→Z shown (storage letter order ≠ application order), Scene value is the widget's
+  per-frame source of truth, displayed precision is authoritative on commit. **Excluded:** undo/redo
+  (no command history, no apply-on-release, no destructive destroy/recreate undo), gizmos/direct
+  manipulation (would make input ownership three-way), the asset CPU/GPU refactor (0027 = M6 gate;
+  M5 adds no GPU-resource ownership — asset editing mutates `assetId` only), M6 save/load, multi-view
+  layouts, scene graph/prefab/ECS. Verification = headless `tests/app/` suites for the semantics +
+  automated log/exit-code assertions + manual docking/smoke evidence.
 
 ## Key external facts (Sep 2026)
 - googlefonts/noto-emoji: zero mesh files on any branch; `3D/` = fonts (TTF) + png (≤512px);
@@ -133,7 +177,9 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
 - [x] M3 vertical slice (ADR-0009; 0015–0018).
 - [x] M4 scene composition (ADR-0010; 0020–0024) — **complete**, archived.
 - [x] 0025 M4 code-cleanup pass — **complete**, archived (independent of M5).
-      Next: M5 ImGui editor.
+- [ ] M5 ImGui editor — architecture **locked in ADR-0011** (Q0–Q14); execution tickets not yet
+      written. First slice = docked layout + `ViewportRect` + input-ownership gate (incl. wheel),
+      which 0026 is blocked by.
 
 ## Execution tickets (active ones live in docs/ticket/; completed archived at docs/archive/ticket/)
 - M0: 0001 (spec) + 0002–0004 (execution) — complete
@@ -187,14 +233,19 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
     graph is recorded in the ticket (no overshoot fixed).
   - Verification: red-first TDD, ctest **15/15 dev + release**, 0024 exit-code matrix and
     `xprop` titles unchanged.
-- 0026 (M5 input & interaction config follow-ups) — deferred to M5: cursor-baseline reset semantics
-  (firstMove is cursor-ownership, not scene lifecycle) + camera interaction sensitivity config
-  owned by the app/input layer — **not** `renderer::Camera` (ADR-0010 Q7 purity preserved)
-- 0027 (asset CPU/GPU boundary architecture spike) — deferred; output = investigation → proposed
-  boundary → ADR/amendment → implementation tickets. Covers type ownership, CPU/GPU resource
-  ownership and lifetimes, library shape, `loadManifestOnly()`/`loadModelFile()` consequences —
-  and must preserve the M4 contracts (AssetRegistry authority, Scene pure data, app-layer
-  `collectDrawItems` seam, borrowed `DrawItem::model`)
+- 0026 (M5 camera interaction semantics & cursor baseline) — **active in M5, blocked by the
+  first M5 slice's input-ownership gate** (ADR-0011 Q9/Q10 fixed input ownership centrally, so
+  this ticket no longer owns it). Scope narrowed to gesture→operation mapping, wheel routing,
+  sensitivity config owned by the app/editor input layer — **not** `renderer::Camera` (ADR-0010 Q7
+  purity preserved) — and cursor-baseline re-establishment (widget-drag end, focus regain, camera
+  drag start/end; deltas denied by the gate are discarded, not deferred)
+- 0027 (asset CPU/GPU boundary architecture spike) — **M6-preceding gate** (ADR-0011 Q1), not an
+  M5 prerequisite; premise corrected: a CPU/GPU boundary **already exists** (no direct GL calls in
+  `src/asset/`; `loadObjShapes`/`CanonicalShape`/`loadModelShapesOnly` CPU-only; `uploadToGpu()`
+  is the single upload gate) and what remains is header/type coupling (`AssetRegistry` public API
+  exposes `renderer::Model*` + caches a `Texture`). M5 adds no GPU-resource ownership; asset
+  editing mutates `assetId` only. Must preserve the M4 contracts (AssetRegistry authority, Scene
+  pure data, app-layer `collectDrawItems` seam, borrowed `DrawItem::model`)
 
 ## Known MVP limitations
 - No transparent-object depth sorting.

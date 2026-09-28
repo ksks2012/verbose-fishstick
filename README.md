@@ -11,7 +11,7 @@ picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-en
 - **Docs hierarchy:** `docs/CONTEXT.md` = current implementation truth; `docs/adr/` = decision
   history (+ embedded milestone specs); `docs/DEFINITION.md` = project vocabulary;
   `docs/CHANGELOG.md` = milestone history; `docs/archive/ticket/` = all execution tickets
-  (complete); `docs/ticket/` = pending (0026/0027 deferred follow-ups).
+  (complete); `docs/ticket/` = pending (0026 M5 camera interaction; 0027 M6-preceding gate).
 
 ## Status
 
@@ -37,8 +37,12 @@ picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-en
   predicate), 0012 app/renderer separation + registry integration, 0010 dependency pinning
 - **0011** M1 code-quality deferred findings (⑦⑧⑨⑩) — folded into 0012
 
-M4 tickets (0020–0025) are complete and archived; only the deferred 0026/0027 follow-ups
-live in `docs/ticket/`. All execution history lives under `docs/archive/ticket/`. Next roadmap milestone:
+M4 tickets (0020–0025) are complete and archived. **M5's architecture is locked in ADR-0011**
+(docked editor layout, `ViewportRect`, `Editor`-owns-`Scene` facade, input-ownership gate); M5
+execution tickets are not written yet, so the only pending tickets are **0026** (M5 camera
+interaction semantics & cursor baseline, blocked by the first slice's input gate) and **0027**
+(M6-preceding asset CPU/GPU boundary gate). All completed execution history lives under
+`docs/archive/ticket/`. Next roadmap milestone:
 **M5 ImGui Editor**.
 
 ## Build & test
@@ -90,7 +94,11 @@ texture ref promotes the asset to `LOADED_WITH_WARNINGS` (geometry still renders
 ## Next steps
 
 1. **M5 ImGui editor** (overlay owns its GL state; ADR-0005 handoff point =
-   `Renderer::End3DPass()`; `lib/imgui` already fetched) — next milestone.
-2. **Deferred follow-ups** (independent of the M5 core work): **0026** M5 input/interaction
-   config (cursor baseline, sensitivity ownership), **0027** asset CPU/GPU boundary spike.
+   `Renderer::End3DPass()`; `lib/imgui` already fetched) — next milestone. Architecture accepted in
+   **ADR-0011** (docked layout, explicit `ViewportRect`, `Editor` owning the `Scene`, input-ownership
+   gate incl. the wheel); execution tickets not yet written.
+2. **Pending follow-ups**: **0026** M5 camera interaction semantics & cursor baseline (active in M5,
+   blocked by the first slice's input-ownership gate — it no longer owns input ownership),
+   **0027** asset CPU/GPU boundary gate (**before M6**; premise corrected — the boundary already
+   exists, what remains is header/type coupling).
 3. **M6 Save/Load** — Scene JSON as a complete snapshot (forward contract in ADR-0010 Q4).

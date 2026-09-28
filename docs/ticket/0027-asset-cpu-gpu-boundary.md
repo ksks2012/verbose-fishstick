@@ -1,12 +1,35 @@
 # 0027 — Asset CPU/GPU boundary architecture spike
 
 **Source:** code review of 0021–0024 (items 003/005), split out of 0025 in the Sep 2026 re-review.
-**Status:** deferred (investigation may start any time; implementation is M5+ work)
-**Blocked by:** none to *explore*; implementation needs an M5+ architecture decision
+**Status:** **M6-preceding architecture gate** (re-scoped 2026-09-28 by ADR-0011 Q1) — not M5
+prerequisite, not in the M5 critical path
+**Blocked by:** none to *explore*; must be closed **before M6 scope opens** (M6's snapshot
+persistence work must not proceed on an undetermined ownership model)
 
-Not M4 work. This is the real architectural issue that 0025③/0025⑤ were circling: AssetRegistry's
-CPU-side manifest/OBJ parsing is fused to a GL upload path, so manifest-only consumers
-(`--list-assets`, asset tests) transitively link glad + OpenGL.
+**Premise correction (ADR-0011 Q1, 2026-09-28).** This ticket was written on the premise that
+"AssetRegistry's CPU-side manifest/OBJ parsing is fused to a GL upload path". The 2026-09-28
+review found that premise out of date — **a CPU/GPU boundary already exists and is already
+enforced**:
+
+- `src/asset/` makes **no direct GL calls**.
+- `loadObjShapes()`, `CanonicalShape` and `loadModelShapesOnly()` are already **CPU-only**.
+- `uploadToGpu()` is already the single, explicit GPU-upload gate.
+
+What actually remains is **header/type coupling**, not a missing runtime boundary:
+`AssetRegistry`'s public API exposes `renderer::Model*` and caches a `Texture`, so the CPU-side
+question ("which assets exist?") and the GPU-side question ("what `Model` is this?") are answered
+by one type. A library split would separate the *link* and the *ownership*, and that is a real
+question — but it is not a defect, it is not urgent, and it is **not M5 work**.
+
+**M5 binding invariant (ADR-0011 Q1):** M5 introduces **no new ownership** of `Model`, `Mesh`,
+`Texture`, or any GPU resource, and does not resolve this coupling. Asset *editing* in M5 means
+mutating a stable `assetId` string and nothing else. If an M5 ticket needs a `Model*`, a
+`Texture`, or a GPU-resource lifetime, that is a signal to bring this ticket forward — not to
+solve it inline.
+
+**Output of the spike (unchanged):** architecture investigation → proposed boundary → ADR (or ADR
+amendment) → implementation tickets (tracer-bullet). The ADR carries the type-ownership decision
+and a rejected-alternatives section; this ticket itself decides nothing.
 
 **Output of the spike:** architecture investigation → proposed boundary → ADR (or ADR amendment)
 → implementation tickets (tracer-bullet). The ADR carries the type-ownership decision and a

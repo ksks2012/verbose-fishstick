@@ -143,6 +143,36 @@ Document hierarchy (per `docs/DOCUMENTATION-LIFECYCLE.md`):
   `libxinerama-dev`, `libxcursor-dev`); may require one-time sudo. Distinct from project-owned
   dependencies, which require no sudo.
 
+## Editor / UI domain (M5 — named in ADR-0011, ahead of implementation)
+
+These nouns are locked by ADR-0011 but **no M5 code exists yet**; treat them as the agreed
+vocabulary the M5 tickets must use, not as existing types.
+
+- **Editor** — the app-layer owner of the editable **Scene** (`noto3d::app::Editor`, owns the Scene
+  **by value**) plus the editor/session state. The **only** mutation route for M5 UI code: it
+  exposes `EntityId`-keyed semantic operations (select, edit transform, assign asset, create,
+  destroy) and no mutable `Scene&`, `Entity*`, or span. Not an asset resolver, not a Model owner,
+  not a renderer, not a GPU-resource owner. Rendering still goes through
+  `app::collectDrawItems(editor.scene(), resolver)`.
+- **EditorState** — editor-**session** state (the selected **EntityId**). Lives as long as the
+  editor session; independent of any frame, viewport, or render pass.
+- **ViewportState** — **per-view** state: one **Camera** plus that view's **ViewportRect**. M5
+  ships one view; the shape is per-view so a split view is an instantiation, not a redesign. The
+  Camera is owned here, not as a `renderScene()` local.
+- **ViewportRect** — `{x, y, width, height}` in **framebuffer pixels** (origin lower-left), as
+  **plain data** with no ImGui types. The single source of view extent for the milestone: aspect,
+  cursor mapping/containment, and the app-established `glViewport`/scissor all read it. The
+  viewport is **not** the framebuffer.
+- **InputState** — per-frame input deltas (cursor, button edges, accumulated scroll) and
+  cursor-baseline bookkeeping, separate from **EditorState** and **ViewportState**.
+- **input ownership** — the binary rule that input belongs to the UI **or** to the camera, never
+  both: `viewportHovered && !IsAnyItemHovered() && !IsAnyItemActive() && !globalModalCapture`, with
+  the **wheel under the same gate**. Camera *semantics* and cursor baselines are 0026, not part of
+  the gate.
+- **AssetChoice** — a value-snapshot row for the M5 asset picker (`id` + typed geometry source).
+  Not a view into registry storage: `AssetRegistry::entries()` returns a span that reload
+  invalidates, so the UI never holds it. Typed values, not pre-formatted display strings.
+
 ## Terms to avoid (anti-language)
 
 | Don't say | Say | Reason |
@@ -152,3 +182,7 @@ Document hierarchy (per `docs/DOCUMENTATION-LIFECYCLE.md`):
 | "model" for a placeholders OBJ | placeholder geometry | placeholder is a geometry source, not the scene's model |
 | "`--demo` appends to the default scene" | demo fixture = the whole Scene | ADR-0010 Q6; demo-only mode, never default + append |
 | `glGetString(GL_VERSION)` prefix/string parsing for capability detection | numeric capability check | ADR-0004 |
+| "the UI needs a mutable `Scene&` / an `Entity*`" | semantic operation on the **Editor** facade | ADR-0011 Q11; a `Scene&` in UI scope would make the `EntityId`-only write path advisory instead of structural |
+| "`io.WantCaptureMouse` says the viewport owns the mouse" | input ownership = hover + ImGui item arbitration | ADR-0011 Q10; the viewport **is** an ImGui window, so `WantCaptureMouse` is legitimately true there and using it as the camera gate kills camera input permanently |
+| "rotation X / Y / Z field" without saying the order | `Pitch (X)` / `Yaw (Y)` / `Roll (Z)`, apply order Y→X→Z | ADR-0011 Q13; storage letter order is not application order (`eulerAngleYXZ(y,x,z)`) |
+| "the editor is undoable / has history" | immediate per-frame mutation, no undo/redo at M5 | ADR-0011 Q4; no command history, no apply-on-release, no destroy/recreate undo |

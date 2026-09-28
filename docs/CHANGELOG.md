@@ -1,5 +1,84 @@
 # CHANGELOG
 
+## [Unreleased] — M5 ImGui Editor (architecture locked; no code yet)
+
+### M5 — editor architecture decided (grilling Q0–Q14; spec embedded in ADR-0011)
+- **M5 architecture accepted before any code** in **ADR-0011** (spec at the ADR layer per
+  DOCUMENTATION-LIFECYCLE; M5 execution tickets not yet written, so nothing here is a behaviour
+  change). Decisions locked:
+  - **Viewport geometry (Q0)** — docked layout; one explicit framebuffer-space `ViewportRect` as
+    plain data (no ImGui types) and the single source of view extent. It drives projection aspect,
+    cursor window→viewport-local mapping with containment, and the app-established
+    `glViewport`/scissor before the 3D pass. Replaces M4's implicit "the framebuffer *is* the
+    view". `Renderer::Begin3DPass()` stays UI-agnostic and takes no rect.
+  - **Editor ownership (Q11)** — an app-layer `Editor` **owns the `Scene` by value** and exposes only
+    `EntityId`-keyed semantic operations. The UI receives the facade and therefore **structurally
+    cannot** obtain a mutable `Scene&`, `Entity*` or span — the `EntityId`-only write path (Q3) is
+    a type boundary instead of a convention. Rendering remains `collectDrawItems(editor.scene(),
+    resolver)`: no second resolution path, single M4 seam, borrowed `DrawItem::model` untouched.
+    Owning the `Scene` also gives M6 a ready-made snapshot-replace boundary.
+  - **Edit semantics (Q3/Q4)** — editor state holds `EntityId` only and re-resolves every frame;
+    mutations go through thin app-layer operations. **No undo/redo**: no command history, no
+    apply-on-release, no drag coalescing, and destroy+recreate is explicitly **not** an undo
+    (ids are monotonic and never reused, so it would break M6's single-identity contract).
+  - **Testability (Q5)** — selection, edits, hierarchy, asset filtering and viewport geometry are
+    ImGui-free and live in `noto3d_app` (which links neither ImGui nor GLFW, a property that
+    already holds and is now load-bearing), so they extend `tests/app/`. `src/ui/` is
+    presentation/input adaptation only; its sources compile into the existing `noto3d-editor`
+    executable (a new library target was rejected as speculative).
+  - **State lifetimes (Q6)** — split three ways: `EditorState` (session: selection),
+    `ViewportState` (**per view**: `Camera` + `ViewportRect`; one view ships, per-view shape so a
+    split view is an instantiation later), `InputState` (per frame). No Scene revision counter at M5.
+  - **Input ownership (Q9/Q10)** — a binary gate:
+    `viewportHovered && !IsAnyItemHovered() && !IsAnyItemActive() && !globalModalCapture`, with the
+    **wheel under the same gate** and `NoScrollbar|NoScrollWithMouse` on the viewport window. The
+    current runtime applies camera input unconditionally (no containment, no ImGui check,
+    unconditionally accumulated scroll), so panels would otherwise move the camera and panel
+    scrolling would zoom. Recorded as a **non-obvious constraint**:
+    **`!io.WantCaptureMouse` must never be used as the viewport camera gate** — the viewport is
+    itself an ImGui window, so that spelling makes camera input permanently dead, and ImGui's own
+    docs point that way. `WantCaptureMouse` is reserved for genuinely global modal/popup capture.
+    The follow-on "camera is frozen during a widget drag, so a baseline must be re-established on
+    drag end" is a **baseline** problem owned by 0026, not an ownership one.
+  - **Assets (Q7)** — the picker consumes an app-built value snapshot (never a `std::span` into
+    registry storage, which reload invalidates); renderable-only, with hidden counts logged; no
+    cache/generation; effect on the Scene is `assetId` mutation only.
+  - **Observability (Q8)** — continues the structured-log pattern; continuous widgets commit/log on
+    `IsItemDeactivatedAfterEdit()`, discrete widgets on the event. The frozen `WM_NAME` title
+    contract and the no-readback/similarity exclusion both continue.
+  - **Transform presentation (Q13)** — `Scene` keeps radians YXZ (unchanged); degrees are a
+    presentation-layer conversion in `src/ui/`, by the same principle that keeps pixel→radian
+    mapping in the app/input layer. Fields labelled by real meaning (`Pitch (X)` / `Yaw (Y)` /
+    `Roll (Z)`) with the applied order Y→X→Z shown, because storage letter order is *not*
+    application order (`eulerAngleYXZ(y, x, z)`). The Scene value is the widget's per-frame source
+    of truth (no persistent degrees copy), and displayed precision is authoritative on commit
+    (WYSIWYG) — stated so the resulting quantisation is a contract, not a bug report.
+  - **Scope exclusions (Q4/Q12/Q1)** — undo/redo; **gizmos / on-viewport direct manipulation**
+    (a gizmo would add a third input owner and turn the boolean gate into a state machine, plus
+    picking and handle layout — deferred to a later direct-manipulation milestone); and the asset
+    CPU/GPU refactor.
+- **ADR-0004 amended** — the viewport is no longer identical to the framebuffer; projection aspect
+  comes from the viewport rect. No GL capability, sRGB, MSAA or init-order decision changes.
+- **ADR-0005 amended** — pass ownership extends to the app establishing `glViewport` + matching
+  scissor before the 3D pass (so the clear is confined to the 3D view), and wheel ownership follows
+  the pass contract. `Renderer` gains no parameters and no geometry concept.
+- **ADR-0010 unchanged** — its Q1/Q3/Q5/Q6/Q7/Q8 contracts are all preserved, stated explicitly in
+  ADR-0011 as an auditable claim.
+- **0026 re-scoped and made active in M5** — blocked by the first slice's input gate, and narrowed
+  to camera interaction semantics, wheel routing, sensitivity config (still **not** in
+  `renderer::Camera`) and cursor-baseline re-establishment. Input ownership is no longer re-decided
+  there. Two implementation facts corrected in the ticket: `prevX/prevY` update **every frame**
+  (there is no per-drag stale delta; the issue is baseline re-establishment at ownership
+  transitions), and the sensitivity constants already live in the app/input layer, so the ADR-0010
+  Q7 purity boundary currently holds.
+- **0027 re-scoped to an M6-preceding gate** — premise corrected: a CPU/GPU boundary **already
+  exists** (no direct GL calls in `src/asset/`; `loadObjShapes`/`CanonicalShape`/
+  `loadModelShapesOnly` are CPU-only; `uploadToGpu()` is the single upload gate) and what remains
+  is header/type coupling (`AssetRegistry` exposes `renderer::Model*` and caches a `Texture`). M5
+  binding invariant: no new `Model`/`Mesh`/`Texture`/GPU ownership; asset editing mutates a stable
+  `assetId` string only.
+- CONTEXT.md updated in the same change.
+
 ## [Unreleased] — M4 Scene Composition & Transform (complete; 0025 cleanup pass complete)
 
 ### M4 — scene foundation, draw-list seam, multi-entity runtime, camera, close (0020–0024; complete)
