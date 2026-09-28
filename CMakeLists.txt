@@ -288,6 +288,18 @@ noto3d_set_warnings(noto3d-app-tests)
 noto3d_apply_sanitizers(noto3d-app-tests)
 add_test(NAME app-draw-list-seam COMMAND noto3d-app-tests)
 
+add_executable(noto3d-viewport-rect-tests tests/app/viewport_rect_test.cpp)
+target_link_libraries(noto3d-viewport-rect-tests PRIVATE noto3d_app noto3d_core)
+noto3d_set_warnings(noto3d-viewport-rect-tests)
+noto3d_apply_sanitizers(noto3d-viewport-rect-tests)
+add_test(NAME app-viewport-rect-math COMMAND noto3d-viewport-rect-tests)
+
+add_executable(noto3d-input-gate-tests tests/app/input_gate_test.cpp)
+target_link_libraries(noto3d-input-gate-tests PRIVATE noto3d_app noto3d_core)
+noto3d_set_warnings(noto3d-input-gate-tests)
+noto3d_apply_sanitizers(noto3d-input-gate-tests)
+add_test(NAME app-input-gate-contract COMMAND noto3d-input-gate-tests)
+
 # Ticket 0025 — CLI contract verified in-process (Options content, not just
 # exit codes); the binary-level CLI matrix below stays as the end-to-end check.
 # Parsing is a pure syntax contract (0025 ①): link noto3d_core only and compile the
@@ -308,6 +320,9 @@ add_test(NAME app-cli-parse-contract COMMAND noto3d-cli-options-tests)
 # Application
 # ---------------------------------------------------------------------------
 add_executable(noto3d-editor src/app/main.cpp)
+target_include_directories(noto3d-editor PRIVATE
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends)
 target_link_libraries(noto3d-editor PRIVATE
     glfw glad glm::glm imgui noto3d_app noto3d_asset)
 target_compile_definitions(noto3d-editor PRIVATE

@@ -9,9 +9,17 @@
 #include <cli_options.hpp>
 #include <draw_list.hpp>
 #include <gl_capability.hpp>
+#include <input_gate.hpp>
 #include <log.hpp>
 #include <renderer.hpp>
 #include <scene.hpp>
+#include <viewport_rect.hpp>
+#include <viewport_state.hpp>
+
+#include "imgui.h"
+#include "imgui_internal.h"
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_opengl3.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -144,7 +152,27 @@ int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
     noto3d::renderer::ShaderProgram baseShader;
     noto3d::asset::AssetRegistry    registry;
     noto3d::renderer::Renderer      renderer;
-    noto3d::renderer::Camera        camera;   // ticket 0023
+    noto3d::app::ViewportState      viewState;   // camera + viewport rect (ticket 0028)
+
+    // ImGui initialisation (M5 docking shell) — RAII teardown on return.
+    // Created inside the GL scope so all ImGui GL objects are valid.
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.IniFilename  = nullptr;  // layout set programmatically; no ini file
+    }
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330 core");
+    struct ImGuiGuard {
+        ~ImGuiGuard() {
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplGlfw_Shutdown();
+            ImGui::DestroyContext();
+        }
+    } imguiGuard;
 
     auto fail = [&](const char* msg) {
         NOTO3D_CRITICAL("{}", msg);
@@ -268,6 +296,8 @@ int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
 
         // ---- Render loop ---------------------------------------------------
         if (ok) {
+            bool firstLayout = true;
+
             while (!glfwWindowShouldClose(window) &&
                    (opts.frameLimit < 0 || frames < opts.frameLimit)) {
                 glfwPollEvents();
@@ -275,8 +305,112 @@ int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
                     glfwSetWindowShouldClose(window, GLFW_TRUE);
                 }
 
-                // Camera input (LMB=orbit, MMB=pan, wheel=zoom; ticket 0023)
+                // ── ImGui new frame ──────────────────────────────────────────
+                ImGui_ImplOpenGL3_NewFrame();
+                ImGui_ImplGlfw_NewFrame();
+                ImGui::NewFrame();
+
+                // ── Dock host (invisible full-window container) ──────────────
                 {
+                    const ImGuiViewport* vp = ImGui::GetMainViewport();
+                    ImGui::SetNextWindowPos(vp->Pos);
+                    ImGui::SetNextWindowSize(vp->Size);
+                    ImGui::SetNextWindowViewport(vp->ID);
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+                    const ImGuiWindowFlags hostFlags =
+                        ImGuiWindowFlags_NoDocking  | ImGuiWindowFlags_NoTitleBar   |
+                        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize     |
+                        ImGuiWindowFlags_NoMove     | ImGuiWindowFlags_NoBackground |
+                        ImGuiWindowFlags_NoBringToFrontOnFocus |
+                        ImGuiWindowFlags_NoNavFocus;
+                    ImGui::Begin("##DockHost", nullptr, hostFlags);
+                    ImGui::PopStyleVar(3);
+                    const ImGuiID dsID =
+                        ImGui::GetID("MainDockspace");
+                    ImGui::DockSpace(dsID, ImVec2(0, 0));
+
+                    // First-frame default layout (programmatic; no .ini) ──────
+                    if (firstLayout) {
+                        ImGui::DockBuilderRemoveNode(dsID);
+                        ImGui::DockBuilderAddNode(dsID, ImGuiDockNodeFlags_DockSpace);
+                        ImGui::DockBuilderSetNodeSize(dsID, vp->Size);
+
+                        ImGuiID left, right;
+                        ImGui::DockBuilderSplitNode(dsID, ImGuiDir_Left, 0.20f, &left, &right);
+                        ImGuiID inspector, view;
+                        ImGui::DockBuilderSplitNode(right, ImGuiDir_Right, 0.25f, &inspector, &view);
+
+                        ImGui::DockBuilderDockWindow("Hierarchy", left);
+                        ImGui::DockBuilderDockWindow("3D View",   view);
+                        ImGui::DockBuilderDockWindow("Inspector", inspector);
+                        ImGui::DockBuilderFinish(dsID);
+                        firstLayout = false;
+                    }
+                    ImGui::End();
+                }
+
+                // ── Hierarchy panel (empty placeholder) ──────────────────────
+                ImGui::Begin("Hierarchy");
+                ImGui::End();
+
+                // ── Inspector panel (empty placeholder) ──────────────────────
+                ImGui::Begin("Inspector");
+                ImGui::End();
+
+                // ── Input gate state (queried before the 3D panel adds items) ─
+                // These reflect all items in Hierarchy + Inspector that were
+                // built above; the 3D-view Dummy() below does NOT affect them.
+                const bool anyItemHovered    = ImGui::IsAnyItemHovered();
+                const bool anyItemActive     = ImGui::IsAnyItemActive();
+                const bool globalModalCapture =
+                    ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId |
+                                           ImGuiPopupFlags_AnyPopupLevel);
+
+                // ── 3D View panel ─────────────────────────────────────────────
+                // Transparent bg so the GL rendering is visible through the panel.
+                // NoScrollbar + NoScrollWithMouse: wheel is owned by the camera gate.
+                noto3d::app::ViewportRect vpr;  // will be populated below
+                bool viewportHovered = false;
+                {
+                    ImGui::SetNextWindowBgAlpha(0.0f);
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+                    const ImGuiWindowFlags viewFlags =
+                        ImGuiWindowFlags_NoScrollbar |
+                        ImGuiWindowFlags_NoScrollWithMouse;
+                    ImGui::Begin("3D View", nullptr, viewFlags);
+                    viewportHovered =
+                        ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+
+                    // Content region → GL-space rect (Y-flip: ImGui origin top-left)
+                    const ImVec2 cpos  = ImGui::GetCursorScreenPos();
+                    const ImVec2 csize = ImGui::GetContentRegionAvail();
+                    int fbW, fbH;
+                    glfwGetFramebufferSize(window, &fbW, &fbH);
+                    vpr = noto3d::app::ViewportRect{
+                        static_cast<int>(cpos.x),
+                        // Y-flip (ADR-0011 Q0): gl_y = fbH - (imgui_top + height)
+                        static_cast<int>(fbH - (cpos.y + csize.y)),
+                        static_cast<int>(csize.x),
+                        static_cast<int>(csize.y)
+                    };
+                    // Advance cursor over the content area (does not register hover).
+                    ImGui::Dummy(csize);
+                    ImGui::End();
+                    ImGui::PopStyleVar();
+                }
+                // Store the current rect back into the ViewportState.
+                viewState.rect = vpr;
+
+                // ── Camera input (gated; denied scroll discarded) ────────────
+                {
+                    const bool gateOpen =
+                        noto3d::app::viewportGateOpen(viewportHovered,
+                                                       anyItemHovered,
+                                                       anyItemActive,
+                                                       globalModalCapture);
+
                     double curX, curY;
                     glfwGetCursorPos(window, &curX, &curY);
                     if (inputState.firstMove) {
@@ -289,36 +423,54 @@ int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
                     inputState.prevX = curX;
                     inputState.prevY = curY;
 
-                    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-                        camera.orbit(dx * kOrbitSens, -dy * kOrbitSens);
+                    if (gateOpen) {
+                        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+                            viewState.camera.orbit(dx * kOrbitSens, -dy * kOrbitSens);
+                        }
+                        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
+                            viewState.camera.pan(dx * kPanSens, -dy * kPanSens);
+                        }
                     }
-                    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
-                        camera.pan(dx * kPanSens, -dy * kPanSens);
-                    }
+                    // Scroll: always discard; zoom only when gate open (ADR-0011 Q10)
                     if (inputState.scrollY != 0.0f) {
-                        camera.zoom(inputState.scrollY * kZoomSens);
-                        inputState.scrollY = 0.0f;
+                        if (gateOpen) {
+                            viewState.camera.zoom(inputState.scrollY * kZoomSens);
+                        }
+                        inputState.scrollY = 0.0f;  // discard even if gate closed
                     }
                 }
 
-                // Compute view + projection from Camera (ADR-0010 Q7)
-                int fbW = 0, fbH = 0;
-                glfwGetFramebufferSize(window, &fbW, &fbH);
-                const float aspect = (fbH > 0)
-                    ? static_cast<float>(fbW) / static_cast<float>(fbH) : 1.0f;
-                const auto proj = camera.projectionMatrix(aspect);
-                const auto view = camera.viewMatrix();
+                // ── 3D render — scissored and viewported to the panel rect ────
+                if (vpr.valid()) {
+                    // Scissor confines both the draw calls and the Begin3DPass
+                    // clear to the 3D panel; regions outside are left to ImGui.
+                    glEnable(GL_SCISSOR_TEST);
+                    glScissor(vpr.x, vpr.y, vpr.width, vpr.height);
+                    glViewport(vpr.x, vpr.y, vpr.width, vpr.height);
 
-                renderer.Begin3DPass();
-                // All draws go through collectDrawItems — no bypass (ADR-0010 Q6)
-                for (const auto& item :
-                         noto3d::app::collectDrawItems(scene, resolver)) {
-                    const glm::mat4 mvp = proj * view * item.modelMatrix;
-                    for (const auto& sm : *item.model) {
-                        renderer.submit(sm.mesh, sm.material, baseShader, mvp);
+                    const auto proj = viewState.camera.projectionMatrix(vpr.aspect());
+                    const auto view = viewState.camera.viewMatrix();
+
+                    renderer.Begin3DPass();  // clears within scissor, sets 3D state
+                    for (const auto& item :
+                             noto3d::app::collectDrawItems(scene, resolver)) {
+                        const glm::mat4 mvp = proj * view * item.modelMatrix;
+                        for (const auto& sm : *item.model) {
+                            renderer.submit(sm.mesh, sm.material, baseShader, mvp);
+                        }
                     }
+                    renderer.End3DPass();
+
+                    glDisable(GL_SCISSOR_TEST);
+                    // Restore full-framebuffer viewport for ImGui rendering.
+                    int fbW, fbH;
+                    glfwGetFramebufferSize(window, &fbW, &fbH);
+                    glViewport(0, 0, fbW, fbH);
                 }
-                renderer.End3DPass();
+
+                // ── ImGui render (draws panels on top of the 3D content) ──────
+                ImGui::Render();
+                ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
                 glfwSwapBuffers(window);
                 ++frames;
