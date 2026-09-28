@@ -125,6 +125,17 @@ ShellFrame submitEditorPanels(GLFWwindow* window,
     } else {
         ImGui::TextDisabled("(nothing selected)");
     }
+
+    // ── Frame-rate readout ─────────────────────────────────────────────────
+    // ImGui's built-in smoothed FPS (averaged over recent frames); presentational
+    // only, in the UI adapter.  No app-layer counter and no headless impact.
+    ImGui::Separator();
+    const ImGuiIO& fps_io = ImGui::GetIO();
+    if (fps_io.Framerate > 0.0f) {
+        ImGui::Text("FPS: %.1f (frame %.2f ms)", fps_io.Framerate, 1000.0f / fps_io.Framerate);
+    } else {
+        ImGui::TextDisabled("FPS: --");
+    }
     ImGui::End();
 
     // ── Input-ownership inputs ─────────────────────────────────────────────
