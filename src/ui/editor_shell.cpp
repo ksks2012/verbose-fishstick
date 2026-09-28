@@ -1,5 +1,6 @@
 #include "editor_shell.hpp"
 
+#include <entity_edit.hpp>
 #include <transform_edit.hpp>
 #include <viewport_rect.hpp>
 
@@ -19,20 +20,90 @@ const char* geometrySourceLabel(asset::GeometrySource source) {
     return source == asset::GeometrySource::Placeholder ? "placeholder" : "official";
 }
 
+// Display label for one picker choice: id + source in parentheses.  Used by the
+// Inspector picker and the Hierarchy Create control.
+std::string choiceLabel(const noto3d::app::AssetChoice& choice) {
+    return choice.id + " (" + geometrySourceLabel(choice.geometrySource) + ")";
+}
+
 ShellFrame submitEditorPanels(GLFWwindow* window,
                                noto3d::app::Editor& editor,
                                const noto3d::app::AssetPickerSnapshot& picker) {
     ShellFrame shell;
 
     // ── Hierarchy panel ──────────────────────────────────────────────────────
-    // Lists entities in creation order; click-to-select (ADR-0011 Q3/Q11).
+    // Entity list (creation order; click-to-select) + create/destroy controls
+    // (ticket 0032).  The create-asset choice comes from the picker's choices,
+    // so a new entity is drawable by construction (ADR-0011 Q7); the created
+    // entity's name defaults to its asset id (Scene names need not be unique).
+    //
+    // The chosen create-asset selection is UI-session presentation state: a
+    // single int in THIS WINDOW's ImGui storage.  Window-scoped (revoked with
+    // the window, cleared between frames is what Begin()/End() storage does),
+    // NOT a process-global static — ADR-0011 Q6.  We store an index into the
+    // picker snapshot; it is re-clamped against the current snapshot every
+    // frame and the choice OBJECT is re-resolved at click time, so a rebuild
+    // (selection-change re-filter) can never feed Create a stale binding.
     ImGui::Begin("Hierarchy");
+    {
+        const ImGuiID key = ImGui::GetID("createAssetIndex");
+        int* const indexPtr = ImGui::GetStateStorage()->GetIntRef(key, 0);
+
+        if (!picker.choices.empty()) {
+            int index = *indexPtr;
+            if (index < 0 || index >= static_cast<int>(picker.choices.size())) {
+                index = 0;  // snapshot (re)built → default to the first choice
+                *indexPtr = index;
+            }
+
+            const auto& createChoice = picker.choices[static_cast<std::size_t>(index)];
+            const std::string createPreview = choiceLabel(createChoice);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::BeginCombo("Create asset", createPreview.c_str())) {
+                for (int i = 0; i < static_cast<int>(picker.choices.size()); ++i) {
+                    const auto& c = picker.choices[static_cast<std::size_t>(i)];
+                    const std::string label = choiceLabel(c);
+                    if (ImGui::Selectable(label.c_str(), i == index)) {
+                        *indexPtr = i;
+                        index = i;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            // Resolve the choice OBJECT at click time from THIS frame's snapshot
+            // (never a reference to a choice captured/stale from an earlier
+            // frame).  index above is already re-clamped this frame.
+            if (ImGui::Button("Create")) {
+                // New id is deliberately not retained: create does not
+                // auto-select (ticket 0032); the row appears above now.
+                (void)noto3d::app::commitCreateEntity(
+                    editor, picker.choices[static_cast<std::size_t>(index)]);
+            }
+        } else {
+            ImGui::TextDisabled("(no renderable assets — create unavailable)");
+        }
+    }
+    ImGui::Separator();
     for (const auto& item : editor.hierarchyItems()) {
         const bool isSelected = (item.id == editor.selectedId());
-        if (ImGui::Selectable(item.name.c_str(), isSelected)) {
+        // Unique widget id per entity (###<id>): Selectable() ids must not
+        // collide when two entities share a name (create defaults the name to
+        // the asset id, so two same-asset entities WOULD collide otherwise).
+        const std::string rowLabel = item.name + "###" + std::to_string(item.id);
+        if (ImGui::Selectable(rowLabel.c_str(), isSelected)) {
             editor.select(item.id);
         }
     }
+    ImGui::Separator();
+    // BeginDisabled/EndDisabled must ALWAYS pair (ImGui asserts on an
+    // unbalanced EndDisabled).  Capture the selection ONCE — re-reading it after
+    // commitDestroySelected destructively cleared it would unbalance the stack.
+    const bool canDestroy = editor.hasSelection();
+    ImGui::BeginDisabled(!canDestroy);
+    if (ImGui::Button("Destroy selected")) {
+        noto3d::app::commitDestroySelected(editor);
+    }
+    ImGui::EndDisabled();
     ImGui::End();
 
     // ── Inspector panel ─────────────────────────────────────────────────────
@@ -67,10 +138,8 @@ ShellFrame submitEditorPanels(GLFWwindow* window,
             ImGui::SetNextItemWidth(-FLT_MIN);
             if (ImGui::BeginCombo("Asset##picker", preview)) {
                 for (const auto& choice : picker.choices) {
-                    const std::string label =
-                        choice.id + " (" + geometrySourceLabel(choice.geometrySource) + ")";
                     const bool isCurrent = assetId && *assetId == choice.id;
-                    if (ImGui::Selectable(label.c_str(), isCurrent)) {
+                    if (ImGui::Selectable(choiceLabel(choice).c_str(), isCurrent)) {
                         noto3d::app::commitAssetAssignment(editor, id, choice.id);
                     }
                 }

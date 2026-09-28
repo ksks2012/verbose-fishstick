@@ -1,7 +1,7 @@
 # 0032 — M5 create and destroy entities
 
 **Source:** ADR-0011 M5 spec (Q3 / Q4 / Q11); fifth M5 slice.
-**Status:** ready-for-agent
+**Status:** implemented — machine-verified; manual evidence pending
 **Blocked by:** 0031
 
 Completes the editing surface: the user can not only change the entities they have, but add and
@@ -39,26 +39,49 @@ the picker would later have to replace anyway.
 
 ## Acceptance
 
-- [ ] Creating an entity adds a row in the Hierarchy, in creation order, drawable in the 3D view on
-      the next frame, and the runtime's reported entity count increases by one
-- [ ] A new entity's asset comes from the picker's choices, and a created entity is never
-      unresolvable by construction
-- [ ] Destroying the selected entity removes it from the Hierarchy and the 3D view immediately, and
-      the reported count decreases by one
-- [ ] Destroying all entities, then creating again, yields **new, never-before-used ids**; the id
-      counter is not reset by emptying the Scene
-- [ ] Destroying when nothing is selected, or destroying an already-destroyed id, is a safe no-op —
-      no crash, no error state
-- [ ] Create and destroy are both logged; the log distinguishes the new id and the destroyed id
+- [x] Creating an entity adds a row in the Hierarchy, in creation order, drawable in the 3D view on
+      the next frame, and the runtime's reported entity count increases by one (verified: `app-entity-edit`
+      + `app-editor-facade`; drawable-by-construction since the asset comes from picker choices)
+- [x] A new entity's asset comes from the picker's choices, and a created entity is never
+      unresolvable by construction (verified: `commitCreateEntity` takes the picker's typed
+      `AssetChoice` by reference — a bare string cannot be handed to it; the UI feeds a choice
+      from the current picker snapshot)
+- [x] Destroying the selected entity removes it from the Hierarchy and the 3D view immediately, and
+      the reported count decreases by one (verified: `app-entity-edit` destroy block + facade count)
+- [x] Destroying all entities, then creating again, yields **new, never-before-used ids**; the id
+      counter is not reset by emptying the Scene (verified: facade id-monotonicity block, `app-editor-facade`)
+- [x] Destroying when nothing is selected, or destroying an already-destroyed id, is a safe no-op —
+      no crash, no error state (verified: `commitDestroySelected` silent no-op + no-op destroy block)
+- [x] Create and destroy are both logged; the log distinguishes the new id and the destroyed id
+      (verified: `app-entity-edit` captures the emitted `M5_ENTITY` lines via a test sink and asserts
+      the `M5_ENTITY created entity='…' id=N assetId='…' count=M` / `M5_ENTITY destroyed entity='…' id=N
+      count=M` format, and that no-op destroys emit nothing)
 - [ ] A manual check confirms there is **no undo** affordance and that a mistaken destroy is
-      recovered by creating a new entity, with a new id
-- [ ] Headless suite covers create/destroy through the facade, id monotonicity across a
+      recovered by creating a new entity, with a new id (manual — pending)
+- [x] Headless suite covers create/destroy through the facade, id monotonicity across a
       destroy/create cycle, the empty-Scene counter behaviour, and no-op destroy cases
-- [ ] `Scene` and `modelMatrix` unchanged; no new entity fields or types introduced
-- [ ] M4 contracts unchanged: CLI exit-code matrix, `M4_INFO` lines, `xprop` titles
-- [ ] Manual evidence recorded: create, destroy, and the resulting list and 3D view
+- [x] `Scene` and `modelMatrix` unchanged; no new entity fields or types introduced
+      (verified: no Scene/headers touched; only `entity_edit` + UI added)
+- [x] M4 contracts unchanged: CLI exit-code matrix, `M4_INFO` lines, `xprop` titles (verified:
+      M4 CLI/`M4_INFO` matrix re-run green on clean dev + release; `xprop` remains a manual item)
+- [ ] Manual evidence recorded: create, destroy, and the resulting list and 3D view (manual — pending)
 
 **Points to ADR:** 0011 (Q3/Q11 the `EntityId` write path through the facade, Q4 no undo and no
 destructive fake undo, Q6 no revision counter, Q7 the asset choice source) · 0010 (Q2 `EntityId`
 never reused, Q4 `clear()` keeps the counter and the M6 snapshot-replace forward contract, Q5 single
 resolution seam)
+
+**Code-review pass (post-implementation):** standards + spec axes parallel review found and fixed — ①
+`BeginDisabled`/`EndDisabled` were unbalanced on a successful Destroy click (the `hasSelection()`
+re-read after the commit cleared it) → ImGui stack assert; now pairs unconditionally guarded by a
+captured `canDestroy`. ② `Selectable()` ids collided when two entities shared a name (create
+defaults the name to the asset id) → separated widgets with `###<entityId>`. ③ Create-combo state
+was a process-global `static int` (ADR-0011 Q6) → moved into the window's ImGui storage, index
+re-clamped per frame, choice object resolved at click time. ④ `commitCreateEntity(Editor, string,
+string)` accepted a bare asset id (only "verified" by a hand-waved comment) → now takes the picker's
+typed `AssetChoice&` (drawable-by-construction is type-enforced). ⑤ duplicated choice-label text →
+`choiceLabel()` helper. ⑥ the un-asked-for on-screen `%zu entity(s)` widget (scope creep + hidden
+when the list is empty) → removed; the count stays in the `M5_ENTITY` log line. ⑦ stale
+asset_picker.hpp "ONLY code path" claim → reworded (create is now a second picker-derived write
+path). ⑧ acceptance wording tightened: log-format and `xprop` boxes no longer claim mechanism
+coverage they do not have. Clean dev + release rebuilds, 21/21 ctest both.

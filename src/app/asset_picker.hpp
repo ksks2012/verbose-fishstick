@@ -44,8 +44,10 @@ struct AssetPickerSnapshot {
 //     hidden=<reference-only>` so hiding is observable in the log (Q7/Q8).
 [[nodiscard]] AssetPickerSnapshot buildAssetPickerSnapshot(const asset::AssetRegistry& registry);
 
-// Commitment of a picker choice: the ONLY code path that reassigns an entity's
-// assetId from the picker.  Goes through the Editor facade (EntityId-keyed,
+// Commitment of a picker choice REASSIGNING an existing entity's assetId from
+// the picker (the other picker-derived write path — commitCreateEntity in
+// entity_edit.hpp — only ever CREATES a new entity from a picker choice).
+// Goes through the Editor facade (EntityId-keyed,
 // ADR-0011 Q3/Q11), mutates only `Entity::assetId` (no Model/GPU ownership, Q1),
 // and logs the assignment.  An id that later fails to resolve degrades to the
 // existing skip-at-frame behaviour (ADR-0010 Q5), never a crash or an empty list.

@@ -280,6 +280,7 @@ add_library(noto3d_app STATIC
     src/app/cli_options.cpp
     src/app/draw_list.cpp
     src/app/editor.cpp
+    src/app/entity_edit.cpp
     src/app/input_gate.cpp
     src/app/transform_edit.cpp
     src/app/viewport_rect.cpp)
@@ -316,6 +317,12 @@ target_link_libraries(noto3d-asset-picker-tests PRIVATE noto3d_app noto3d_core)
 noto3d_set_warnings(noto3d-asset-picker-tests)
 noto3d_apply_sanitizers(noto3d-asset-picker-tests)
 add_test(NAME app-asset-picker COMMAND noto3d-asset-picker-tests)
+
+add_executable(noto3d-entity-edit-tests tests/app/entity_edit_test.cpp)
+target_link_libraries(noto3d-entity-edit-tests PRIVATE noto3d_app noto3d_core)
+noto3d_set_warnings(noto3d-entity-edit-tests)
+noto3d_apply_sanitizers(noto3d-entity-edit-tests)
+add_test(NAME app-entity-edit COMMAND noto3d-entity-edit-tests)
 
 add_executable(noto3d-viewport-rect-tests
     tests/app/viewport_rect_test.cpp

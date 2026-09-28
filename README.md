@@ -39,10 +39,9 @@ picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-en
 
 M4 tickets (0020–0025) are complete and archived. **M5's architecture is locked in ADR-0011**
 (docked editor layout, `ViewportRect`, `Editor`-owns-`Scene` facade, input-ownership gate); M5
-execution tickets are written as **0028–0034**, plus **0035** (code-quality, off-chain); **0028, 0029, 0030 and 0031** are implemented and
-  machine-verified, with manual evidence pending for 0030/0031. The remaining M5 chain is
-  **0032** (entity
-  create/destroy) → **0033** (integration regression); **0026** (M5 camera interaction semantics
+execution tickets are written as **0028–0034**, plus **0035** (code-quality, off-chain); **0028–0032** are implemented and
+  machine-verified, with manual evidence pending for 0030–0032. The remaining M5 chain is
+  **0033** (M5 close: integration regression + manual docking smoke); **0026** (M5 camera interaction semantics
   & cursor baseline) and **0027** (M6-preceding asset CPU/GPU boundary gate) are the pending
   side-tickets. All completed execution history lives under `docs/archive/ticket/`.
   Current milestone: **M5 ImGui Editor**.
@@ -54,7 +53,7 @@ Machine prereq (one-time): `sudo apt install libxinerama-dev libxcursor-dev libx
 ```bash
 cmake --preset dev                      # configure (Debug + sanitizer option)
 cmake --build build/dev -j               # build
-ctest --test-dir build/dev               # headless tests (20 suites)
+ctest --test-dir build/dev               # headless tests (21 suites)
 build/dev/noto3d-editor --frames=5       # non-interactive smoke: prints M0_OK / M1_DONE
 build/dev/noto3d-editor                  # interactive window
 ```

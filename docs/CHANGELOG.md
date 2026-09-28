@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## [Unreleased] — M5 ImGui Editor (0028–0031 landed; 0030/0031 manual evidence pending)
+## [Unreleased] — M5 ImGui Editor (0028–0032 landed; 0030–0032 manual evidence pending)
 
 ### M5 — implemented (0028, 0029)
 - **0028 — editor shell, `ViewportRect`, input-ownership gate.** Docked host with the 3D view as a
@@ -80,6 +80,24 @@
   the effect on the Scene is limited to `assetId` (two entities on one asset stay independent; an
   unresolvable id degrades to the existing skip-not-fail seam). Suites 18 → **20**; ctest 20/20 on
   dev and release, 0 warnings on full rebuilds.
+
+### M5 — implemented (0032)
+- **0032 — M5 create/destroy entities.** Completes the editing surface: the Hierarchy pane gains a
+  Create control and a Destroy button. Create's asset choice comes from the **same picker choices**
+  the 0031 snapshot offers, so a new entity is drawable by construction — it never starts life
+  unresolvable (ADR-0011 Q7; new entity name defaults to its asset id; create does not auto-select).
+  Destroy removes the currently selected entity via the facade and clears the selection. Both go
+  through `Editor` semantic operations keyed by `EntityId` (Q3/Q11) — no undo, no destroy+recreate
+  fake-undo, and `EntityId` stays monotonic/never-reused with the counter preserved across
+  `clear()` (ADR-0010 Q2/Q4, M6 identity contract). No `Scene` revision counter and no prefab/scene
+  graph/entity-type concept were introduced (Q6, M4 exclusions). App-layer commit utilities live in
+  new `src/app/entity_edit.{hpp,cpp}`: `commitCreateEntity` and `commitDestroySelected`, each
+  logging `M5_ENTITY created entity='…' id=N assetId='…' count=M` / `M5_ENTITY destroyed
+  entity='…' id=N count=M` on the discrete event (Q8; destroy-with-nothing-selected is a silent
+  safe no-op). Headless suite `app-entity-edit` covers create-through-facade + choice-carrying +
+  selection untouched, and destroy-of-selection incl. no-op paths; `app-editor-facade` grew
+  facade-level id-monotonicity-across-cycles and no-op destroy checks. Suites 20 → **21**; ctest
+  21/21 on dev and release, 0 warnings on full rebuilds.
 
 ### M5 — editor architecture decided (grilling Q0–Q14; spec embedded in ADR-0011)
 - **M5 architecture accepted before any code** in **ADR-0011** (spec at the ADR layer per

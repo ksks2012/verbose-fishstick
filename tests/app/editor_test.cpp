@@ -197,6 +197,38 @@ int main() {
         check(s.entities().size() == 2, "scene(): entity count visible");
     }
 
+    // ── facade-level id monotonicity across a destroy/create cycle ───────────
+    // M6 identity contract (ADR-0010 Q2/Q4): ids are monotonic, never reused,
+    // and emptying the Scene does NOT reset the counter (ticket 0032).
+    {
+        Editor ed;
+        const auto id1 = ed.createEntity("a", "a");
+        const auto id2 = ed.createEntity("b", "b");
+        ed.destroyEntity(id1);
+        ed.destroyEntity(id2);
+        check(ed.entityCount() == 0, "cycle: all destroyed → count 0");
+
+        const auto id3 = ed.createEntity("c", "c");
+        check(id3 > id2, "cycle: new id is greater than any prior id (never reused)");
+        check(ed.entityCount() == 1, "cycle: count back to one");
+
+        ed.clear();
+        check(ed.entityCount() == 0, "clear: emptied again");
+        const auto id4 = ed.createEntity("d", "d");
+        check(id4 > id3, "id: counter advances past id3 after clear (never reset)");
+    }
+
+    // ── facade-level no-op destroys ──────────────────────────────────────────
+    {
+        Editor ed;
+        const auto idA = ed.createEntity("a", "a");
+        check(!ed.destroyEntity(InvalidEntityId), "no-op: invalid id returns false");
+        check(!ed.destroyEntity(idA + 99),         "no-op: unknown id returns false");
+        check(ed.destroyEntity(idA),               "no-op: real id returns true");
+        check(!ed.destroyEntity(idA),              "no-op: already-destroyed id returns false");
+        check(ed.entityCount() == 0, "no-op: no entities created or resurrected");
+    }
+
     if (g_failures == 0) { NOTO3D_INFO("ALL PASS"); return EXIT_SUCCESS; }
     NOTO3D_ERROR("{} FAILURE(S)", g_failures);
     return EXIT_FAILURE;
