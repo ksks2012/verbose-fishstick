@@ -112,6 +112,14 @@ sweep of the four gate inputs) are headless and link `noto3d_core` only. The HiD
 `toFramebufferRect()` plus `DisplayTransform` regression cases: non-zero host viewport origin,
 anisotropic scale, `lround` rounding, and a minimised/zero-height framebuffer.
 
+> **Correction (2026-09-28).** An earlier version of this section claimed "All headers are
+> declaration-only — every definition lives in a `.cpp`". **That was false.** It was derived from a
+> grep matching only `inline` and `constexpr`, which cannot see a member function defined inside a
+> class body — those are *implicitly* inline. A definition-shaped scan finds eight accessors still
+> defined in headers, one of them (`PanelViewport::active()`) introduced by this ticket's own
+> extraction. The rule (ADR-0008) is unchanged; the code is what was wrong. Tracked and fixed by
+> **0035**.
+
 **Still open** — the two boxes above: `xprop` window titles and the manual evidence (docking
 behaviour, panel layout, and that panel interaction does not move the camera). Both need a display
 and a real pointer.

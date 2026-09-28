@@ -39,7 +39,7 @@ picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-en
 
 M4 tickets (0020–0025) are complete and archived. **M5's architecture is locked in ADR-0011**
 (docked editor layout, `ViewportRect`, `Editor`-owns-`Scene` facade, input-ownership gate); M5
-execution tickets are written as **0028–0034**; **0028** and **0029** are implemented and
+execution tickets are written as **0028–0034**, plus **0035** (code-quality, off-chain); **0028** and **0029** are implemented and
   machine-verified, with manual evidence still pending for both. The remaining M5 chain is
   **0030** (Inspector transform editing) → **0031** (asset picker) → **0032** (entity
   create/destroy) → **0033** (integration regression); **0026** (M5 camera interaction semantics

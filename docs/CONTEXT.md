@@ -187,8 +187,11 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
         root; 0026 attaches to it) → 0029 = **done**: Hierarchy + selection + `Editor` facade → 0030 (transform
       editing) and 0031 (asset picker) in parallel → 0032 (create/destroy, needs 0031's asset
       choice) → 0033 (M5 close: matrix + manual docking smoke, blocks on 0030 + 0032).
-      **0034** (viewport/input contract hardening: `contains()`'s reserved role + gate-read
-      ordering) is blocked by 0028, runs docs-only, and does not block the M5 close.
+        **0034** (viewport/input contract hardening: `contains()`'s reserved role + gate-read
+        ordering) is blocked by 0028, runs docs-only, and does not block the M5 close.
+        **0035** (declaration-only conformance: 8 remaining implicit-inline accessors in
+        `renderer`/`ui` headers — 2 of them dead and deleted outright) is code-quality, independent
+        of the M5 chain, and does **not** block 0030.
 
 ## Execution tickets (active ones live in docs/ticket/; completed archived at docs/archive/ticket/)
 - M0: 0001 (spec) + 0002–0004 (execution) — complete

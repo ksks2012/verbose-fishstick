@@ -33,6 +33,14 @@
 - **Open:** manual evidence for both tickets. For 0029 this is not a formality — `ImGui::Selectable`
   needs a real pointer, and a selection click makes `IsAnyItemActive()` true, which closes the
   camera gate for that frame; that interaction is currently unverified.
+- **Raised — 0035 (declaration-only conformance).** ADR-0008 requires headers to carry declarations
+  only. Eight class-body accessor definitions still violate it: `camera.hpp` (4), `mesh.hpp` (2),
+  `texture.hpp` (1), `panel_render.hpp` (1). Two of them — `Texture::id()` and
+  `PanelViewport::active()` — have zero call sites and are to be deleted rather than moved. Six are
+  pre-existing renderer code; one came from 0028's `src/ui/` extraction. The verification note in
+  ticket 0028 claiming "all headers are declaration-only" is **false** and is corrected via 0035;
+  it was produced by a keyword-based grep that cannot see implicitly-inline member definitions.
+  Independent of the M5 chain; does not block 0030.
 - **Open — deviation from ADR-0011 Q5.** The 0028 implementation put `src/ui/` in a new
   `noto3d_ui` static library, but Q5 states those sources compile into the existing `noto3d-editor`
   executable and rejects a separate library for M5 (the adapter needs a display and a GL context, so
