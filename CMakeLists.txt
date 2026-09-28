@@ -280,6 +280,7 @@ add_library(noto3d_app STATIC
     src/app/draw_list.cpp
     src/app/editor.cpp
     src/app/input_gate.cpp
+    src/app/transform_edit.cpp
     src/app/viewport_rect.cpp)
 target_include_directories(noto3d_app PUBLIC
     ${CMAKE_SOURCE_DIR}/src/app)
@@ -299,6 +300,12 @@ target_link_libraries(noto3d-editor-tests PRIVATE noto3d_app noto3d_core)
 noto3d_set_warnings(noto3d-editor-tests)
 noto3d_apply_sanitizers(noto3d-editor-tests)
 add_test(NAME app-editor-facade COMMAND noto3d-editor-tests)
+
+add_executable(noto3d-transform-edit-tests tests/app/transform_edit_test.cpp)
+target_link_libraries(noto3d-transform-edit-tests PRIVATE noto3d_app noto3d_core)
+noto3d_set_warnings(noto3d-transform-edit-tests)
+noto3d_apply_sanitizers(noto3d-transform-edit-tests)
+add_test(NAME app-transform-edit COMMAND noto3d-transform-edit-tests)
 
 add_executable(noto3d-viewport-rect-tests
     tests/app/viewport_rect_test.cpp

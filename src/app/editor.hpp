@@ -31,7 +31,10 @@ public:
     void            clear() noexcept;  // clears all entities; resets selection
 
     // === Thin EntityId-keyed field mutations ================================
-    bool setEntityPosition(scene::EntityId id, glm::vec3 pos) noexcept;
+    bool setEntityPosition(scene::EntityId id, glm::vec3 pos)             noexcept;
+    bool setEntityRotation(scene::EntityId id, glm::vec3 rotationRad)     noexcept;
+    bool setEntityScale   (scene::EntityId id, glm::vec3 scale)           noexcept;
+    bool setEntityTransform(scene::EntityId id, const scene::Transform& t) noexcept;
 
     // === Entity enumeration (value copy for UI; no span, no pointer) ========
     struct HierarchyItem {
@@ -52,6 +55,13 @@ public:
     [[nodiscard]] bool                       hasSelection()    const noexcept;
     [[nodiscard]] std::optional<std::string> selectedName()    const noexcept;
     [[nodiscard]] std::optional<std::string> selectedAssetId() const noexcept;
+    // Returns the selected entity's transform; nullopt when nothing is selected
+    // or the selection id is stale.  Re-resolves every call (no cached copy).
+    [[nodiscard]] std::optional<scene::Transform> selectedTransform() const noexcept;
+
+    // === Per-id entity data access ==========================================
+    // Re-resolves each call; callers must never retain the return value.
+    [[nodiscard]] std::optional<std::string> entityName(scene::EntityId id) const noexcept;
 
     // === Read-only scene access (rendering seam only) =======================
     // Passed to collectDrawItems(); callers must not retain the reference across

@@ -1,5 +1,6 @@
 #include "editor_shell.hpp"
 
+#include <transform_edit.hpp>
 #include <viewport_rect.hpp>
 
 #ifndef GLFW_INCLUDE_NONE
@@ -27,13 +28,64 @@ ShellFrame submitEditorPanels(GLFWwindow* window,
     ImGui::End();
 
     // ── Inspector panel ─────────────────────────────────────────────────────
-    // Shows selected entity's identity; no field editing (0030's job).
+    // Identity lines stay (0029); transform fields added here (0030).
+    // The Scene value is the widget's source of truth every frame:
+    //   read → convert to degrees → feed widget → commit on IsItemDeactivatedAfterEdit.
+    // No persistent degrees copy is kept in UI state (ADR-0011 Q13).
     ImGui::Begin("Inspector");
     if (editor.hasSelection()) {
-        const auto name    = editor.selectedName();
-        const auto assetId = editor.selectedAssetId();
+        const auto id        = editor.selectedId();
+        const auto name      = editor.selectedName();
+        const auto assetId   = editor.selectedAssetId();
+        const auto transform = editor.selectedTransform();
+
         ImGui::Text("Name:    %s", name    ? name->c_str()    : "(none)");
         ImGui::Text("AssetId: %s", assetId ? assetId->c_str() : "(none)");
+
+        if (transform) {
+            const noto3d::scene::Transform& t = *transform;
+
+            // ── Position ───────────────────────────────────────────────
+            ImGui::Separator();
+            float pos[3] = {t.position.x, t.position.y, t.position.z};
+            ImGui::DragFloat3("Position", pos, 0.01f);
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                noto3d::app::commitPosition(editor, id, {pos[0], pos[1], pos[2]});
+            }
+
+            // ── Rotation (degrees; Scene stores radians — ADR-0011 Q13) ──
+            // modelMatrix composes eulerAngleYXZ(y,x,z); label each axis
+            // by its role so the applied order is visible, not implied.
+            ImGui::Separator();
+            ImGui::TextUnformatted("Rotation (Y->X->Z applied order):");
+            const glm::vec3 rotDeg =
+                noto3d::app::rotationRadiansToDegrees(t.rotation);
+            float pitch = rotDeg.x;   // Pitch: rotation.x
+            float yaw   = rotDeg.y;   // Yaw:   rotation.y
+            float roll  = rotDeg.z;   // Roll:  rotation.z
+
+            // Separate DragFloat per axis: each fires its own commit boundary.
+            ImGui::DragFloat("  Pitch (X)##rotX", &pitch, 0.5f, -360.0f, 360.0f, "%.2f deg");
+            const bool pitchDone = ImGui::IsItemDeactivatedAfterEdit();
+            ImGui::DragFloat("  Yaw   (Y)##rotY", &yaw,   0.5f, -360.0f, 360.0f, "%.2f deg");
+            const bool yawDone   = ImGui::IsItemDeactivatedAfterEdit();
+            ImGui::DragFloat("  Roll  (Z)##rotZ", &roll,  0.5f, -360.0f, 360.0f, "%.2f deg");
+            const bool rollDone  = ImGui::IsItemDeactivatedAfterEdit();
+
+            if (pitchDone || yawDone || rollDone) {
+                // Commit once, on release, with the final value (Q8).
+                // commitRotation converts degrees → radians and logs both (Q13).
+                noto3d::app::commitRotation(editor, id, {pitch, yaw, roll});
+            }
+
+            // ── Scale ──────────────────────────────────────────────────
+            ImGui::Separator();
+            float scale[3] = {t.scale.x, t.scale.y, t.scale.z};
+            ImGui::DragFloat3("Scale", scale, 0.01f, 0.001f, 100.0f);
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                noto3d::app::commitScale(editor, id, {scale[0], scale[1], scale[2]});
+            }
+        }
     } else {
         ImGui::TextDisabled("(nothing selected)");
     }

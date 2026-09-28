@@ -223,8 +223,14 @@ static int run(const noto3d::app::Options& opts) {
 
     NOTO3D_INFO("M0_OK context 3.3+ core profile; renderer baseline configured");
 
-    // Debug GL context setup — one-time, not a per-pass concern (ADR-0004)
-    noto3d::ui::installGlDebugCallback();
+    // Debug GL context setup — one-time, not a per-pass concern (ADR-0004).
+    //
+    // The return value is deliberately discarded: the callee already self-reports
+    // ("M0_WARN debug context requested but GL_KHR_debug unavailable"). Note that in a
+    // release build NOTO3D_DEBUG_GL is 0, so the whole body compiles out and `false`
+    // means "debug GL was never requested" — not a failure. Warning here would emit a
+    // spurious M0_WARN on every release run.
+    static_cast<void>(noto3d::ui::installGlDebugCallback());
 
     // The whole render path (GL objects, Scene, main loop) lives in renderScene()
     // so every GL object dies before the context does.

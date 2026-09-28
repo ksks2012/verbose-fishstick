@@ -37,6 +37,30 @@ bool Editor::setEntityPosition(scene::EntityId id, glm::vec3 pos) noexcept {
     return false;
 }
 
+bool Editor::setEntityRotation(scene::EntityId id, glm::vec3 rotationRad) noexcept {
+    if (auto* e = scene_.findEntity(id)) {
+        e->transform.rotation = rotationRad;
+        return true;
+    }
+    return false;
+}
+
+bool Editor::setEntityScale(scene::EntityId id, glm::vec3 scale) noexcept {
+    if (auto* e = scene_.findEntity(id)) {
+        e->transform.scale = scale;
+        return true;
+    }
+    return false;
+}
+
+bool Editor::setEntityTransform(scene::EntityId id, const scene::Transform& t) noexcept {
+    if (auto* e = scene_.findEntity(id)) {
+        e->transform = t;
+        return true;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Entity enumeration
 // ---------------------------------------------------------------------------
@@ -93,6 +117,20 @@ std::optional<std::string> Editor::selectedName() const noexcept {
 std::optional<std::string> Editor::selectedAssetId() const noexcept {
     if (const auto* e = scene_.findEntity(selection_)) {
         return e->assetId;
+    }
+    return std::nullopt;
+}
+
+std::optional<scene::Transform> Editor::selectedTransform() const noexcept {
+    if (const auto* e = scene_.findEntity(selection_)) {
+        return e->transform;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> Editor::entityName(scene::EntityId id) const noexcept {
+    if (const auto* e = scene_.findEntity(id)) {
+        return e->name;
     }
     return std::nullopt;
 }
