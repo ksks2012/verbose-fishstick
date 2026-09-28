@@ -14,7 +14,8 @@ C++/OpenGL editor MVP for Noto 3D-style emoji composition ("emoji_editor").
 ## Current milestone
 M4 Scene Composition & Transform **complete** (0020–0024) and its post-close **0025 code-cleanup
 pass complete** (0020–0025 archived). **M5 ImGui Editor has an accepted architecture (ADR-0011,
-grilling Q0–Q14) and its execution tickets are written (0028–0033; not yet started)**. M0
+grilling Q0–Q14) and its execution tickets are written (0028–0034; 0028 implemented, manual
+evidence pending)**. M0
 (Environment/build),
 M0.5 (Asset contract spike), M1 (minimal renderer + pass hygiene), M2 (0008 → 0014 → 0009 → 0013 +
 0012/0011/0010) and M3 (0015 → 0016 → 0017 → 0018) are done and verified. Completed tickets are
@@ -104,7 +105,9 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   explicit caller-trusted absolute path (e.g. NOTO3D_ASSETS_DIR-derived demo fixture, deliberately
   kept out of the manifest); the path predicate still governs every manifest field and every
   `diffuseTextureRef` (0013) on both load paths — never bypassed.
-- ADR-0008: C++20; noto3d::* namespaces; src/app|core|renderer|asset|scene|serialization|ui;
+- ADR-0008: C++20; noto3d::* namespaces; **headers are declaration-only — every definition
+  lives in a `.cpp`**; src/app|core|renderer|asset|scene|serialization|ui (`src/ui/` created by
+  ticket 0028, target `noto3d_ui`: presentation + input adaptation only, links ImGui/GLFW;
   boundary exceptions, no-throw render loop; custom Log facade over spdlog (log_init + NOTO3D_*
   macros, single replaceable call-site spelling; spdlog fetched into lib/spdlog, pinned — ADR-0008
   amendment); -Wall -Wextra -Wpedantic, -Werror optional; CMake presets dev/release;
@@ -132,8 +135,8 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   0.5–20 independent of near/far, pan in world units, no Input abstraction). Close = automated
   matrix (exit codes + structured runtime-log / `entities=<N>` assertions) + manual evidence
   (xprop `WM_NAME` titles, visual smoke); no readback/similarity.
-- ADR-0011: M5 editor architecture (grilling Q0–Q14, locked; **execution tickets 0028–0033 written,
-  not yet started**). Docked layout; one explicit framebuffer-space `ViewportRect` (plain data,
+- ADR-0011: M5 editor architecture (grilling Q0–Q14, locked; **execution tickets 0028–0034 written;
+  0028 implemented, manual evidence pending**). Docked layout; one explicit framebuffer-space `ViewportRect` (plain data,
   no ImGui types) as the single source of view extent, driving projection aspect, cursor
   window→viewport-local mapping + containment, and the app-established `glViewport`/scissor before
   the 3D pass (`Begin3DPass()` stays UI-agnostic; ADR-0005 amended; ADR-0004 amended since
@@ -178,11 +181,13 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
 - [x] M3 vertical slice (ADR-0009; 0015–0018).
 - [x] M4 scene composition (ADR-0010; 0020–0024) — **complete**, archived.
 - [x] 0025 M4 code-cleanup pass — **complete**, archived (independent of M5).
-- [ ] M5 ImGui editor — architecture **locked in ADR-0011** (Q0–Q14); execution tickets **0028–0033
-      written, not started**. 0028 = docked shell + `ViewportRect` + input-ownership gate (frontier
+- [ ] M5 ImGui editor — architecture **locked in ADR-0011** (Q0–Q14); execution tickets **0028–0034
+      written; 0028 implemented, manual evidence pending**. 0028 = docked shell + `ViewportRect` + input-ownership gate (frontier
       root; 0026 attaches to it) → 0029 = Hierarchy + selection + `Editor` facade → 0030 (transform
       editing) and 0031 (asset picker) in parallel → 0032 (create/destroy, needs 0031's asset
       choice) → 0033 (M5 close: matrix + manual docking smoke, blocks on 0030 + 0032).
+      **0034** (viewport/input contract hardening: `contains()`'s reserved role + gate-read
+      ordering) is blocked by 0028, runs docs-only, and does not block the M5 close.
 
 ## Execution tickets (active ones live in docs/ticket/; completed archived at docs/archive/ticket/)
 - M0: 0001 (spec) + 0002–0004 (execution) — complete
@@ -242,6 +247,14 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   sensitivity config owned by the app/editor input layer — **not** `renderer::Camera` (ADR-0010 Q7
   purity preserved) — and cursor-baseline re-establishment (widget-drag end, focus regain, camera
   drag start/end; deltas denied by the gate are discarded, not deferred)
+- 0034 (M5 viewport/input contract hardening) — **ready-for-agent**, blocked by 0028, docs/comment
+  only, does not block the M5 close. Records two contracts found by the 0028 review: ① viewport
+  input ownership uses ImGui hover + Q10 item arbitration, **not** `ViewportRect::contains()` (so
+  Q0's "cursor mapping + containment" wording is amended; `contains()` stays headless-covered,
+  framebuffer-space, and reserved for 0026/future picking); ② the four gate inputs must be read
+  **before** the 3D panel submits its own items, because `Dummy()` calls `ItemAdd()` and would
+  otherwise close the gate permanently — the same silent-death class as the `WantCaptureMouse`
+  spelling Q10 forbids
 - 0027 (asset CPU/GPU boundary architecture spike) — **M6-preceding gate** (ADR-0011 Q1), not an
   M5 prerequisite; premise corrected: a CPU/GPU boundary **already exists** (no direct GL calls in
   `src/asset/`; `loadObjShapes`/`CanonicalShape`/`loadModelShapesOnly` CPU-only; `uploadToGpu()`
@@ -251,5 +264,10 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   pure data, app-layer `collectDrawItems` seam, borrowed `DrawItem::model`)
 
 ## Known MVP limitations
+- The dev preset's LeakSanitizer reports a fixed 112-byte / 2-allocation leak on any GL run
+  (verified identical before and after ticket 0028's refactor). Every stack frame is
+  `libLLVM`/`libubsan` — it is Mesa's llvmpipe software-rasteriser JIT under a display-less
+  environment, not project code. It does **not** appear on `--list-assets` (no GL context), which
+  is the quickest way to confirm the cause.
 - No transparent-object depth sorting.
 - Changing asset geometry requires manifest edit + explicit registry reload (by design).

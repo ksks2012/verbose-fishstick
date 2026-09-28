@@ -58,7 +58,7 @@ with the mouse", not on camera feel.
       given the M5 summary (both in the same change, per the document hierarchy)
 - [ ] ADR-0011's scope exclusions re-confirmed as still out of scope, and any deviation found during
       implementation recorded as an ADR amendment rather than a silent edit
-- [ ] 0028–0033 archived under the accepted ADRs; ADR-0011 left unmodified unless superseded
+- [ ] 0028–0034 archived under the accepted ADRs; ADR-0011 left unmodified unless superseded
 - [ ] 0026 recorded as an M5-adjacent follow-up (still open, now waiting only on 0028), and 0027
       still an M6-preceding gate
 - [ ] Milestone close evidence summarised in this ticket, and an execution summary written under

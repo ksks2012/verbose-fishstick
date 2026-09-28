@@ -51,6 +51,31 @@ into the app layer so they are headless-testable — which is what makes the sli
 evidence rather than as a screenshot. That extraction belongs to **this** slice, not to a separate
 horizontal prefactor ticket.
 
+### Resulting layout
+
+`main.cpp` went 611 → 256 lines by splitting the entry point along the layering ADR-0008 and
+ADR-0011 already defined, and **headers are now declaration-only** (every definition lives in a
+`.cpp`):
+
+- `src/app/` (`noto3d_app`, links neither ImGui nor GLFW) — `viewport_rect.{hpp,cpp}`,
+  `input_gate.{hpp,cpp}`, `camera_input.{hpp,cpp}` (gesture math, previously an anonymous-namespace
+  blob in `main.cpp`), `viewport_state.hpp`.
+- `src/ui/` (`noto3d_ui`, **new target**; presentation and input adaptation only, per ADR-0011) —
+  `imgui_harness.{hpp,cpp}` (context + backend RAII), `dock_layout.{hpp,cpp}`,
+  `editor_shell.{hpp,cpp}` (panels + ownership inputs; carries the 0034 ② ordering contract),
+  `panel_render.{hpp,cpp}` (scissor/viewport scope + the `collectDrawItems` draw),
+  `window_input.{hpp,cpp}`.
+- `src/app/main.cpp` — GLFW lifecycle, the GL scope (ticket 0025's rule), and the frame loop only.
+- `src/app/editor_entry.{hpp,cpp}` — CLI→Scene entry model + `--list-assets`. Built into the
+  **executable**, not `noto3d_app`: it needs `noto3d_asset`, and adding that edge to the app library
+  is a target-graph change owned by 0027 / 0031, not this slice.
+- `noto3d-viewport-rect-tests` / `noto3d-input-gate-tests` now compile their TU directly and link
+  `noto3d_core` only (the `noto3d-cli-options-tests` pattern), so the headless guarantee is
+  structural rather than incidental.
+
+The gate-read ordering from 0034 ② is now stated in `submitEditorPanels()`'s contract, next to the
+code that depends on it, rather than only in a comment inside the frame loop.
+
 ## Acceptance
 
 - [ ] Dock host with the 3D view as a real panel; Hierarchy and Inspector panels present but empty
