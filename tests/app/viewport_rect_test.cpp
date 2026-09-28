@@ -84,6 +84,95 @@ int main() {
         check(!r.contains(250.0f, 400.0f), "non-square: above panel");
     }
 
+    // ── toFramebufferRect: identity (scale 1, window at screen origin) ──────
+    {
+        using noto3d::app::DisplayTransform;
+        using noto3d::app::ScreenRect;
+        const auto r = noto3d::app::toFramebufferRect(
+            ScreenRect{100.0f, 50.0f, 640.0f, 480.0f},
+            DisplayTransform{0.0f, 0.0f, 1.0f, 1.0f, 1080});
+        // top-left (100,50) + 640x480 → gl_y = 1080 - (50 + 480) = 550
+        check(r.x == 100 && r.y == 550 && r.width == 640 && r.height == 480,
+              "toFramebufferRect: identity transform");
+        check(near(r.aspect(), 640.0f / 480.0f), "toFramebufferRect: identity aspect");
+    }
+
+    // ── toFramebufferRect: HiDPI scale 2 (the case that was broken) ──────────
+    {
+        using noto3d::app::DisplayTransform;
+        using noto3d::app::ScreenRect;
+        const auto r = noto3d::app::toFramebufferRect(
+            ScreenRect{100.0f, 50.0f, 640.0f, 480.0f},
+            DisplayTransform{0.0f, 0.0f, 2.0f, 2.0f, 2160});
+        // (100,50)*2 = (200,100); size 1280x960; gl_y = 2160 - (100 + 960) = 1100
+        check(r.x == 200 && r.y == 1100 && r.width == 1280 && r.height == 960,
+              "toFramebufferRect: HiDPI scale 2 maps to framebuffer pixels");
+        check(near(r.aspect(), 1280.0f / 960.0f),
+              "toFramebufferRect: uniform scale preserves aspect");
+    }
+
+    // ── toFramebufferRect: window not at screen origin (second monitor) ─────
+    {
+        using noto3d::app::DisplayTransform;
+        using noto3d::app::ScreenRect;
+        const auto r = noto3d::app::toFramebufferRect(
+            ScreenRect{100.0f, 50.0f, 640.0f, 480.0f},
+            DisplayTransform{1920.0f, 100.0f, 1.0f, 1.0f, 1080});
+        // left = 1920 + 100 = 2020; top = 100 + 50 = 150;
+        // gl_y = 1080 - (150 + 480) = 450
+        check(r.x == 2020 && r.y == 450 && r.width == 640 && r.height == 480,
+              "toFramebufferRect: non-zero host viewport origin applied");
+    }
+
+    // ── toFramebufferRect: anisotropic scale + origin together ──────────────
+    {
+        using noto3d::app::DisplayTransform;
+        using noto3d::app::ScreenRect;
+        const auto r = noto3d::app::toFramebufferRect(
+            ScreenRect{200.0f, 100.0f, 400.0f, 300.0f},
+            DisplayTransform{100.0f, 50.0f, 2.0f, 1.5f, 1440});
+        // left = (100+200)*2 = 600; top = (50+100)*1.5 = 225;
+        // size 800x450; gl_y = 1440 - (225 + 450) = 765
+        check(r.x == 600 && r.y == 765 && r.width == 800 && r.height == 450,
+              "toFramebufferRect: anisotropic scale and origin");
+        check(near(r.aspect(), 800.0f / 450.0f),
+              "toFramebufferRect: anisotropic aspect");
+    }
+
+    // ── toFramebufferRect: rounding of sub-pixel input ──────────────────────
+    {
+        using noto3d::app::DisplayTransform;
+        using noto3d::app::ScreenRect;
+        const auto r = noto3d::app::toFramebufferRect(
+            ScreenRect{100.5f, 0.0f, 10.0f, 10.0f},
+            DisplayTransform{0.0f, 0.0f, 1.0f, 1.0f, 100});
+        // 100.5 rounds away from zero → 101; gl_y = 100 - (0 + 10) = 90
+        check(r.x == 101 && r.y == 90 && r.width == 10 && r.height == 10,
+              "toFramebufferRect: sub-pixel rect rounds to whole framebuffer pixels");
+    }
+
+    // ── toFramebufferRect: degenerate inputs ────────────────────────────────
+    {
+        using noto3d::app::DisplayTransform;
+        using noto3d::app::ScreenRect;
+        // Minimised window: no framebuffer → invalid, caller skips the 3D pass.
+        check(!noto3d::app::toFramebufferRect(
+                   ScreenRect{10.0f, 10.0f, 400.0f, 300.0f},
+                   DisplayTransform{0.0f, 0.0f, 1.0f, 1.0f, 0}).valid(),
+              "toFramebufferRect: framebufferHeight=0 → invalid");
+        // Collapsed panel: no content area → invalid.
+        check(!noto3d::app::toFramebufferRect(
+                   ScreenRect{10.0f, 10.0f, 0.0f, 0.0f},
+                   DisplayTransform{0.0f, 0.0f, 1.0f, 1.0f, 1080}).valid(),
+              "toFramebufferRect: zero-size panel → invalid");
+        // A zero/absent scale must not zero the rect out.
+        const auto r = noto3d::app::toFramebufferRect(
+            ScreenRect{10.0f, 10.0f, 400.0f, 300.0f},
+            DisplayTransform{0.0f, 0.0f, 0.0f, 0.0f, 1080});
+        check(r.valid() && r.x == 10 && r.y == 770 && r.width == 400 && r.height == 300,
+              "toFramebufferRect: zero scale falls back to 1.0");
+    }
+
     if (g_failures == 0) { NOTO3D_INFO("ALL PASS"); return EXIT_SUCCESS; }
     NOTO3D_ERROR("{} FAILURE(S)", g_failures);
     return EXIT_FAILURE;

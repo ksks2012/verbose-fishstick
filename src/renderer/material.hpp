@@ -25,8 +25,7 @@ struct Material {
 };
 
 // effectiveAlpha = baseColor.a * opacity  (DEFINITION.md; never silently extended)
-[[nodiscard]] inline float effectiveAlpha(const Material& m) noexcept {
-    return m.baseColor.a * m.opacity;
-}
+// Declaration-only by project rule: the definition lives in material.cpp.
+[[nodiscard]] float effectiveAlpha(const Material& m) noexcept;
 
 }  // namespace noto3d::renderer

@@ -221,6 +221,7 @@ add_test(NAME asset-manifest-integrity COMMAND noto3d-manifest-tests)
 # ---------------------------------------------------------------------------
 add_library(noto3d_renderer STATIC
     src/renderer/camera.cpp
+    src/renderer/material.cpp
     src/renderer/mesh.cpp
     src/renderer/renderer.cpp
     src/renderer/shader_program.cpp
@@ -272,9 +273,13 @@ add_test(NAME scene-entity-contract COMMAND noto3d-scene-tests)
 # ---------------------------------------------------------------------------
 # Application library (ADR-0008/0010): app-layer orchestration, no GL state
 # ---------------------------------------------------------------------------
+# Declaration-only headers: every implementation lives in a .cpp (project rule).
 add_library(noto3d_app STATIC
+    src/app/camera_input.cpp
     src/app/cli_options.cpp
-    src/app/draw_list.cpp)
+    src/app/draw_list.cpp
+    src/app/input_gate.cpp
+    src/app/viewport_rect.cpp)
 target_include_directories(noto3d_app PUBLIC
     ${CMAKE_SOURCE_DIR}/src/app)
 target_link_libraries(noto3d_app
@@ -288,14 +293,22 @@ noto3d_set_warnings(noto3d-app-tests)
 noto3d_apply_sanitizers(noto3d-app-tests)
 add_test(NAME app-draw-list-seam COMMAND noto3d-app-tests)
 
-add_executable(noto3d-viewport-rect-tests tests/app/viewport_rect_test.cpp)
-target_link_libraries(noto3d-viewport-rect-tests PRIVATE noto3d_app noto3d_core)
+add_executable(noto3d-viewport-rect-tests
+    tests/app/viewport_rect_test.cpp
+    src/app/viewport_rect.cpp)
+target_include_directories(noto3d-viewport-rect-tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/app)
+target_link_libraries(noto3d-viewport-rect-tests PRIVATE noto3d_core)
 noto3d_set_warnings(noto3d-viewport-rect-tests)
 noto3d_apply_sanitizers(noto3d-viewport-rect-tests)
 add_test(NAME app-viewport-rect-math COMMAND noto3d-viewport-rect-tests)
 
-add_executable(noto3d-input-gate-tests tests/app/input_gate_test.cpp)
-target_link_libraries(noto3d-input-gate-tests PRIVATE noto3d_app noto3d_core)
+add_executable(noto3d-input-gate-tests
+    tests/app/input_gate_test.cpp
+    src/app/input_gate.cpp)
+target_include_directories(noto3d-input-gate-tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/app)
+target_link_libraries(noto3d-input-gate-tests PRIVATE noto3d_core)
 noto3d_set_warnings(noto3d-input-gate-tests)
 noto3d_apply_sanitizers(noto3d-input-gate-tests)
 add_test(NAME app-input-gate-contract COMMAND noto3d-input-gate-tests)
@@ -317,14 +330,38 @@ noto3d_apply_sanitizers(noto3d-cli-options-tests)
 add_test(NAME app-cli-parse-contract COMMAND noto3d-cli-options-tests)
 
 # ---------------------------------------------------------------------------
-# Application
+# UI adaptation layer (ADR-0008 reserves src/ui; ADR-0011: presentation and
+# input adaptation only — no editor or scene logic lives here)
 # ---------------------------------------------------------------------------
-add_executable(noto3d-editor src/app/main.cpp)
-target_include_directories(noto3d-editor PRIVATE
-    ${IMGUI_DIR}
-    ${IMGUI_DIR}/backends)
+add_library(noto3d_ui STATIC
+    src/ui/dock_layout.cpp
+    src/ui/editor_shell.cpp
+    src/ui/imgui_harness.cpp
+    src/ui/panel_render.cpp
+    src/ui/window_input.cpp)
+target_include_directories(noto3d_ui
+    PUBLIC  ${CMAKE_SOURCE_DIR}/src/ui
+    PRIVATE ${IMGUI_DIR} ${IMGUI_DIR}/backends)
+target_link_libraries(noto3d_ui
+    PUBLIC  noto3d_app
+    PRIVATE glfw glad glm::glm imgui)
+target_compile_definitions(noto3d_ui PRIVATE
+    NOTO3D_DEBUG_GL=$<BOOL:${NOTO3D_DEBUG_GL}>)
+noto3d_set_warnings(noto3d_ui)
+noto3d_apply_sanitizers(noto3d_ui)
+
+# ---------------------------------------------------------------------------
+# Application
+#
+# editor_entry.cpp lives in src/app/ but is built into the executable, not into
+# noto3d_app: it needs noto3d_asset, and promoting that edge is a target-graph
+# change owned by tickets 0027 / 0031.
+# ---------------------------------------------------------------------------
+add_executable(noto3d-editor
+    src/app/main.cpp
+    src/app/editor_entry.cpp)
 target_link_libraries(noto3d-editor PRIVATE
-    glfw glad glm::glm imgui noto3d_app noto3d_asset)
+    glfw glad glm::glm imgui noto3d_ui noto3d_app noto3d_asset)
 target_compile_definitions(noto3d-editor PRIVATE
     NOTO3D_DEBUG_GL=$<BOOL:${NOTO3D_DEBUG_GL}>
     NOTO3D_SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders"

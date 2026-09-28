@@ -6,18 +6,18 @@ namespace noto3d::app {
 //
 // Returns true iff the camera may consume mouse drags and the scroll wheel
 // on this frame.  All four inputs are Booleans sourced at the adapter edge
-// (main.cpp / the ImGui wiring), never from io.WantCaptureMouse.
+// (src/ui/), never from io.WantCaptureMouse.
 //
 // !io.WantCaptureMouse must NOT be used as the gate — the 3D panel is itself
 // an ImGui window, so that flag is permanently true and makes camera input dead.
 //
 // Wheel ownership: denied scroll deltas must be DISCARDED, never deferred to
 // a later frame (ADR-0011 Q10 / ADR-0005 amendment).
-[[nodiscard]] inline bool viewportGateOpen(bool viewportHovered,
-                                            bool anyItemHovered,
-                                            bool anyItemActive,
-                                            bool globalModalCapture) noexcept {
-    return viewportHovered && !anyItemHovered && !anyItemActive && !globalModalCapture;
-}
+//
+// Declaration-only by project rule: the definition lives in input_gate.cpp.
+[[nodiscard]] bool viewportGateOpen(bool viewportHovered,
+                                    bool anyItemHovered,
+                                    bool anyItemActive,
+                                    bool globalModalCapture) noexcept;
 
 }  // namespace noto3d::app
