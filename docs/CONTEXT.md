@@ -37,7 +37,9 @@ archived at `docs/archive/ticket/` (all 36, after the 0036–0039 chain closed 2
   world-space Transform·Matrix via `scene::modelMatrix`), app-level draw-list seam
   (`app::collectDrawItems`, unresolved → skip, empty Resolver ⇒ `std::logic_error`), CLI→Scene
   entry model (default `m4_vertical_scene`, `--asset` single-entity, `--demo` demo-only fixture
-  scene, `--asset`+`--demo` → exit 1, no `--scene=`, invalid flag → exit 1),
+  scene, `--asset`+`--demo` → exit 1, invalid flag → exit 1). **M4 closed with no `--scene=`; M6
+  adds it as a third mutually exclusive entry mode (ADR-0013 Q5)** — the M4 statement is superseded
+  by ADR-0010's amendment, not deleted, and `--list-assets` keeps its pre-GL short-circuit.
   pure-math orbit/zoom/pan Camera (spherical convention locked; initial eye exactly `(0,0.5,3)`).
   Closed by an automated CLI/`M4_INFO`/CTest matrix (8/8 dev + release) + xprop title evidence +
   user-confirmed manual smoke; no readback/similarity. CLI→Scene render path is exclusively via
@@ -47,7 +49,22 @@ archived at `docs/archive/ticket/` (all 36, after the 0036–0039 chain closed 2
 - 0010 done: all six Git deps pinned by immutable SHA (each resolves to its release tag);
   no archive sources → `URL_HASH` n/a; dev + release configure/build + `ctest` green.
 
-Next on the roadmap: **M6 Save/Load**. **M5 ImGui Editor is complete** (architecture locked in
+Next on the roadmap: **M6 Save/Load** — architecture **locked in ADR-0013** (grilling Q0–Q11,
+2026-09-29; execution tickets not yet written). Its shape: a headless `noto3d::serialization` layer
+(lives in `src/serialization/`, reserved and empty since ADR-0008) that projects `Scene` to/from a
+single versioned `.scene` JSON document, with **no** new dependency and **no** in-editor file menu,
+file picker, dirty state, or Save-vs-Save-As. `--scene=<path>` is a **third mutually exclusive entry
+mode** alongside `--asset`/`--demo`; `--save-scene=<path>` is an **output** option that is not part
+of that set and writes the entry scene once, before the render loop, atomically (temp file +
+`rename`) and overwriting silently. Load reaches the editor through exactly one new by-value
+`Editor::replaceScene(Scene)`, so the M5 type boundary (no mutable `Scene&`/`Entity*`) is preserved;
+save needs **no** new `Editor` API because `Editor::scene()` already returns `const Scene&`. Load
+is **strict on structure / lenient on references**: a malformed or non-v1 document hard-fails with
+a diagnostic and a non-zero exit, while an unresolvable `assetId` is kept, warned about, and
+skipped at render (the M4 contract). A configure-time arch guard keeps the serializer physically
+unable to link `noto3d_asset`/`noto3d_renderer`/`noto3d_core`/glad, which is what makes that split
+structural rather than conventional.
+**M5 ImGui Editor is complete** (architecture locked in
 **ADR-0011**, execution tickets 0028–0034 written and delivered): docked
 layout + explicit framebuffer-space `ViewportRect` driving aspect/cursor/`glViewport`/scissor;
 app-layer `Editor` **owns the `Scene` by value** and is the only mutation route, so the UI
@@ -70,7 +87,13 @@ M5-adjacent, still open, waiting only on 0028; 0035 is code-quality and does not
 in-progress on its four manual-smoke boxes; **0040 is the ADR-0012 close-out residue — two ①/③
 invariants the ADR states but nothing asserts; code-quality, does not block M6**; 0027 is
 **complete and archived — decided in ADR-0012**, its implementation 0036–0039 is **complete and
-archived — closed 2026-09-29**), plus
+archived — closed 2026-09-29**), plus the **M6 execution chain 0041–0046 (spec embedded in
+ADR-0013)**: 0041 `noto3d_serialization` target + proven-fires arch guard · 0042 `Scene` restore
+primitive + `Editor::replaceScene` · 0043 serialize/deserialize happy-path round-trip · 0044
+strict-structure/lenient-reference load policy · 0045 CLI `--scene=` entry + `--save-scene=` output
++ atomic file I/O · 0046 M6 close (matrix, two-tier evidence, archiving). Blocking chain: 0041 and
+0042 are independent (parallel); 0043 needs 0041+0042; 0044 needs 0043; 0045 needs 0043+0044;
+0046 needs 0045, plus
 0020–0025, 0027 (the ADR-0012 spike record), 0028–0034 and 0036–0039 archived under accepted ADRs.
 M0 scope, user stories and acceptance matrix: `docs/archive/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
@@ -217,6 +240,43 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
     keep-as-is, renderer-side upload (inverts M4), split CPU/GPU `Material` (duplicates ADR-0006),
     asset-owned `Vertex`/`Material` copies (32 B layout drift). **Supersedes no prior ADR** — 0006,
     0007, 0008, 0009, 0010, 0011 all stand; this is additive.
+- ADR-0013: **M6 Save/Load — `.scene` snapshot persistence** (grilling Q0–Q11, locked 2026-09-29;
+    execution tickets not yet written; **spec embedded in the ADR** per DOCUMENTATION-LIFECYCLE).
+    M6 is a **persistence core + CLI round-trip**, deliberately *not* an in-editor document editor:
+    no file menu, no file picker (`lib/` has no file-dialog library and ADR-0003 constrains new
+    deps), no dirty state, no Save-vs-Save-As, no new dependency. **Q0** surface · **Q1** allocator
+    is **derived** (`nextEntityId = max(restored) + 1`), so a destroyed high-water id *may reappear*
+    after a round-trip — accepted deliberately, because a load starts a new Scene lifetime, nothing
+    in M6 observes the repeat, and it keeps the file a pure function of its entity set; this also
+    **amends the old "EntityId = single identity (runtime = persistent)" wording**, which overstated
+    what the file records, and is now pinned by a test rather than left to chance · **Q2** one
+    self-contained `.scene` JSON file, assets referenced by `assetId` only (no geometry/path/hash —
+    `manifest.json` stays the single source of truth), rotation in **radians YXZ**, and **not**
+    recorded: allocator, selection, camera, viewport · **Q3** load is **strict on structure /
+    lenient on references**: unreadable/malformed JSON, non-v1 `version`, missing or mistyped
+    field, `id == 0`, duplicate `id`, malformed `transform` all hard-fail with a diagnostic and a
+    non-zero exit, while an unresolvable `assetId` is kept as pure data, warned, and skipped at
+    render (the M4 contract survives into persistence) · **Q4** `version` must be exactly `1`;
+    unknown keys at any level are **ignored**, and a future version may only **add** fields · **Q5**
+    `--scene=<path>` is a **third mutually exclusive entry mode** (any two → exit 1, pre-GL);
+    **supersedes M4's frozen "no `--scene=`"** (ADR-0010 amended, not edited) · **Q6** load injects
+    via exactly one new **`Editor::replaceScene(Scene)` by value**, which clears selection and
+    carries the derived allocator with it; I/O stays in the app layer so `Editor` remains an
+    I/O-free semantic facade, and **save needs no new API** (`Editor::scene()` already returns
+    `const Scene&`) · **Q7** `--save-scene=<path>` is an **output option**, orthogonal to the entry
+    set, writing once after the entry scene is built and before the render loop · **Q8** saves are
+    **atomic** (temp file + `rename`) and **overwrite silently**; a missing parent directory is a
+    diagnostic + non-zero exit, never a silent `mkdir` · **Q9** a loaded scene reports its **file
+    stem**, so the frozen `M4_INFO`/title shapes are reused unchanged and the milestone tag stays
+    frozen at `(M4)` (the M5 precedent) · **Q10** an empty `entities: []` document is valid, but M6
+    adds no flag that *creates* an empty scene · **Q11** a new `noto3d_serialization` target linking
+    `noto3d_scene` + nlohmann/json only, guarded by a configure-time arch guard proving it links no
+    `noto3d_asset`/`noto3d_renderer`/`noto3d_core`/glad — which is what makes Q3's split structural
+    rather than conventional, at the cost of a serialization-local `Result`/diagnostics vocabulary
+    (ADR-0008's convention, local because the shared one lives in `noto3d_asset_cpu`).
+    **Amends** ADR-0010 (the `--scene=` clause) and `DEFINITION.md` (the EntityId identity wording,
+    the snapshot-replace rule, and the new document shape); **supersedes no prior decision** — 0006,
+    0007, 0008, 0010, 0011, 0012 all stand.
 
 ## Key external facts (Sep 2026)
 - googlefonts/noto-emoji: zero mesh files on any branch; `3D/` = fonts (TTF) + png (≤512px);
@@ -288,6 +348,12 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
     graph is recorded in the ticket (no overshoot fixed).
   - Verification: red-first TDD, ctest **15/15 dev + release**, 0024 exit-code matrix and
     `xprop` titles unchanged.
+
+### M6 (spec embedded in ADR-0013; tickets written, execution not started)
+- 0041 (`noto3d_serialization` target + arch guard proven to fire) · 0042 (`Scene` restore primitive
+  + `Editor::replaceScene(Scene)`) · 0043 (v1 round-trip happy path) · 0044 (strict structure /
+  lenient references) · 0045 (CLI `--scene=` + `--save-scene=` + atomic I/O) · 0046 (M6 close) — all
+  `ready-for-agent`; blocking chain 0041‖0042 → 0043 → 0044 → 0045 → 0046
 
 ### M5 (spec embedded in ADR-0011; implemented, machine-verified, tickets archived)
 - 0028 (docked shell + `ViewportRect` + input-ownership gate) — complete, archived (headless

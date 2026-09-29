@@ -279,3 +279,31 @@ Critical locks that were under-specified and are now definitive:
 Tickets 0021–0024 updated in the same change; 0020's evidence reworded to the locked T·R·S
 wording. If a later milestone needs a different spherical/gesture convention it supersedes this
 ADR rather than editing it.
+## Amendment — M6 adds `--scene=` (2026-09-29, ADR-0013 Q5/Q9)
+
+M6's spec (ADR-0013) supersedes one clause of Q8 above. Appended, not edited, per
+DOCUMENTATION-LIFECYCLE.
+
+- **Q8's "no `--scene=`" is superseded.** `--scene=<path>` now exists as a **third entry mode**,
+  mutually exclusive with `--asset` and `--demo`: any two together exit 1 **pre-GL**, reusing the
+  existing `--asset`+`--demo` rule and diagnostic style so the check stays headless-testable. The
+  default `m4_vertical_scene`, `--asset`, `--demo` and `--list-assets` behaviours are all unchanged.
+- **The "no `--dump-scene`" clause above still stands.** M6's write path is named `--save-scene=`,
+  and it is an **output option orthogonal to the entry-mode set**, not a dump subcommand: it writes
+  the entry scene once after it is built and before the render loop. M6 deliberately did not
+  resurrect `--dump-scene`.
+- **Q8's `M4_INFO … entities=<N>` line is reused, not replaced.** A scene loaded via `--scene=`
+  reports its **file stem** as the scene name, so the log line and the window title keep their exact
+  frozen shapes and the close matrix gains a row rather than a parallel format. M6 adds separate
+  `M6_INFO` lines for the load and save *events*; it does not introduce a second
+  "rendering scene" line shape.
+- **The milestone tag stays frozen at `(M4)`.** M5 shipped without bumping it and its titles were
+  verified unchanged, so "the tag is frozen, not tracked" is the established precedent; changing it
+  is a separate decision, not a milestone side effect.
+- **Q4's snapshot-replace forward contract is unchanged in shape and clarified in wording.** Load
+  still replaces the whole Scene and never merges. ADR-0013 Q1 sharpens what "including id
+  allocation state" meant: the allocator is **recomputed** as `max(restored ids) + 1` and is *not*
+  persisted, so a destroyed high-water id may be re-issued after a load. Q4's own "never reused
+  within a Scene lifetime" still holds, because a load constructs a new Scene lifetime. The old
+  "EntityId = single identity (runtime = persistent)" phrasing in `DEFINITION.md` is amended in the
+  same change as ADR-0013.

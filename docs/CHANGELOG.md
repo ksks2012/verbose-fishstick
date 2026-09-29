@@ -2,6 +2,29 @@
 
 ## [Unreleased] — M5 ImGui Editor (complete; 0028–0034 archived; four manual smoke items open in 0033)
 
+### Architecture — M6 Save/Load (grilling → ADR-0013)
+- **ADR-0013 locked; M6 execution tickets not yet written.** A grilling session (Q0–Q11) settled the
+  milestone before the first ticket could decide any of it by accident. M6 is a **persistence core +
+  CLI round-trip**, not an in-editor document editor — `lib/` has no file-dialog library, and ADR-0003
+  constrains new dependencies, so the UI affordances (file menu, picker, dirty state, Save-vs-Save-As)
+  are explicitly deferred rather than smuggled in. A new `noto3d_serialization` target delivers
+  `Scene` ↔ a single versioned `.scene` JSON document into the `src/serialization/` directory ADR-0008
+  reserved at M0 and that has been empty ever since. The decisions most likely to be re-opened later:
+  the **id allocator is derived, not persisted** (`max(restored)+1`), so a destroyed high-water id may
+  reappear after a round-trip — accepted because a load starts a new Scene lifetime, nothing in M6
+  observes the repeat, and it keeps the file a pure function of its entity set (this also amends
+  `DEFINITION.md`'s overstated "runtime = persistent" wording, and is pinned by a test); and the
+  **strict-structure / lenient-references** split, where a malformed or non-v1 document hard-fails
+  loudly but an unresolvable `assetId` is kept, warned about, and skipped at render, so the M4
+  "unresolved never invalidates the Scene" contract survives into persistence. Load reaches the
+  editor through one new by-value `Editor::replaceScene(Scene)`, keeping the M5 guarantee that no
+  caller can obtain a mutable `Scene&`/`Entity*`; save needs no new API. A configure-time arch guard
+  makes the serializer's blindness to the asset registry structural instead of conventional.
+  `--scene=<path>` is a third mutually exclusive entry mode (**superseding** M4's frozen "no
+  `--scene=`", amended not edited), and `--save-scene=<path>` is an orthogonal output flag that
+  writes atomically before the render loop. Amends ADR-0010 + `DEFINITION.md`; supersedes no prior
+  decision. See `docs/adr/0013-scene-save-load-persistence.md`.
+
 ### Architecture — asset CPU/GPU boundary (0027 spike → ADR-0012)
 - **0039 — asset CPU/GPU split close-out: graph recorded, full regression re-run.** The last tracer
   ticket, and the explicit "did the refactor change anything observable?" check. Its top-level

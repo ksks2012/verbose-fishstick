@@ -28,17 +28,32 @@ Document hierarchy (per `docs/DOCUMENTATION-LIFECYCLE.md`):
   Material/MaterialOverride is deferred to M5/M6 (the old "entity = id + transform + material"
   phrasing predates ADR-0010).
 - **EntityId** — `std::uint32_t`, `0` = **InvalidEntityId**. Monotonic counter from 1 for the life
-  of the Scene; **never reused** (destroyed ids, and `clear()` does not reset the counter). An
-  identity, never a storage index (id ≠ vector position). The single identity (runtime =
-  persistent) for M6.
+  of the Scene; **never reused** within that life (destroyed ids, and `clear()` does not reset the
+  counter). An identity, never a storage index (id ≠ vector position). It is the single identity
+  *within a Scene lifetime* (ADR-0010 Q2/Q4), and it is what a `.scene` file persists. **Across
+  save/load the allocator is recomputed** as `max(restored ids) + 1` (ADR-0013 Q1), so an id that was
+  destroyed before the save may be re-issued after the load; a load constructs a new Scene lifetime,
+  so no id is ever reused *within* one, and nothing in M6 observes the repeat (no undo, selection is
+  not persisted, and nothing outside the Scene holds an id).
 - **Transform** — per-entity position / rotation / scale, in Y-up, −Z forward **world space**.
   Rotation = Euler **radians**, YXZ order: `x = pitch`, `y = yaw`, `z = roll`.
 - **modelMatrix** — `scene::modelMatrix(transform)`: the single transform→matrix definition,
   `M = T·R·S`, YXZ via `glm::eulerAngleYXZ` (sole implementation; an experimental GTX API —
   `GLM_ENABLE_EXPERIMENTAL` stays TU-local). 0022/0024 never recompose matrices.
-- **Scene snapshot (M6 forward contract)** — a Scene JSON file is a **complete snapshot**; loading
-  **replaces** the whole Scene (entities + id allocation state), never merges; loader sets
-  `nextEntityId = max(restored ids) + 1` (empty → 1).
+- **scene file** — a single `.scene` JSON document that is a **complete snapshot** of a Scene
+  (ADR-0013 Q2). `version` (integer, currently `1`) + `entities[]` of
+  `{id, name, assetId, transform{position,rotation,scale}}`; `rotation` is **radians YXZ**, the
+  Scene's own unit. Assets are referenced by `assetId` only — no geometry, path, or hash is ever
+  embedded (`manifest.json` stays the single source of truth, ADR-0007). **Not** recorded: the id
+  allocator, selection, camera, viewport, or panel layout. The name reported in the
+  `M4_INFO`/window-title contract is the **file stem**; the milestone tag stays frozen at `(M4)`.
+- **Scene snapshot (M6 forward contract)** — loading a scene file **replaces** the whole Scene
+  (entities + id allocation state), never merges; the loader sets `nextEntityId = max(restored ids) +
+  1` (empty → 1). **Structural** errors (unreadable/malformed JSON, missing or unsupported
+  `version`, missing/mistyped required field, `id == 0`, duplicate `id`, malformed `transform`)
+  hard-fail the load; an **unresolvable** `assetId` is kept as pure data, warned about, and skipped
+  at render (ADR-0013 Q3). Only the exact `version` `1` is accepted and unknown keys are ignored
+  (ADR-0013 Q4); a future version may only **add** fields.
 - **m4_vertical_scene** — the default M4 fixture scene: `smile@(-1.5,0,0)`, `crown@(0,0,0)`,
   `sunglasses@(1.5,0,0)`.
 - **demo_checker / demo mode** — `--demo` runs the **0014 demo fixture as a demo-only Scene**
