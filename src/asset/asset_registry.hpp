@@ -2,8 +2,6 @@
 
 #include "asset_cpu.hpp"
 #include "manifest_types.hpp"
-#include <model.hpp>
-#include <texture.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -12,6 +10,22 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+
+namespace noto3d::renderer {
+// GPU-owning types (ADR-0012 ①).  Declared but not defined here so this header —
+// and every CPU-only consumer of AssetRegistry — resolves no GL header.  The
+// registry only holds them behind shared_ptr and hands out borrowed pointers, so
+// an incomplete type is enough; the definitions live in the noto3d_asset facade.
+//
+// Model is an alias, not a class, so it must be re-declared exactly as model.hpp
+// declares it: `using Model = std::vector<SubMesh>` over an incomplete SubMesh.
+// std::vector supports an incomplete element type (C++17) for declaration, which
+// is all the shared_ptr/pointer members below require.
+struct SubMesh;
+using Model = std::vector<SubMesh>;
+
+class Texture;
+}  // namespace noto3d::renderer
 
 namespace noto3d::asset {
 
@@ -29,6 +43,15 @@ namespace noto3d::asset {
 //   * Deduplication: two entries sharing the same canonical geometry path share one
 //     CPU parse (uniqueGeometryCount) and, in Full mode, one Model.
 //   * Explicit reload() only; no filesystem watcher.
+//
+// Link boundary (ADR-0012 ③).  This one class spans both libraries, and which
+// half you link decides whether you pull in GL:
+//   * noto3d_asset_cpu — loadManifestOnly(), loadModelShapesOnly() and every
+//     read-only accessor.  No GL symbol is referenced, so a headless test or
+//     CLI links no GL at all.
+//   * noto3d_asset (facade) — load(), loadModelFile() and reload().  reload()
+//     lives here because it spans both modes, so a caller that can reach Full
+//     mode can repeat a Full load.
 class AssetRegistry {
 public:
     AssetRegistry() = default;
@@ -104,7 +127,7 @@ private:
     // Texture path → shared GL texture (Full mode only; reference_image never enters here).
     std::unordered_map<std::string, std::shared_ptr<renderer::Texture>> m_textureCache;
 
-    // Standalone (non-manifest) load state — cleared by doLoad() like the caches.
+    // Standalone (non-manifest) load state — cleared by every load like the caches.
     std::shared_ptr<const CpuObj>    m_externalCpu;
     std::filesystem::path            m_externalObjDir;      // texture base dir
     std::string                      m_externalCanonKey;    // GPU dedup key
@@ -115,7 +138,27 @@ private:
     // across two libraries — the registry still owns both caches.
     CpuCache                         m_cpuCache;
 
-    RegistryResult doLoad(const std::filesystem::path& manifestPath, Mode mode);
+    // Clear every cache and the standalone state, then remember this load's
+    // request so reload() can repeat it (ADR-0007: explicit reload only).
+    void resetForLoad(const std::filesystem::path& manifestPath, Mode mode);
+
+    // Parse the manifest, seed the diagnostics and run the CPU pipeline, leaving
+    // m_entries populated.  Shared by both drivers so the two modes cannot differ
+    // in how a manifest is read; the caller then attaches models to the returned
+    // outcomes.  `gpuOwns` is empty for ManifestOnly.
+    std::vector<CpuEntryLoad> runManifestPipeline(const std::filesystem::path& manifestPath,
+                                                 const GpuDedupProbe&         gpuOwns = {});
+
+    // The two load drivers, split by the GL boundary (ADR-0012 ③) so that
+    // loadManifestOnly() and the read-only accessors link from noto3d_asset_cpu
+    // with no GPU symbol in sight.  Each is implemented in the library that owns
+    // its half: doLoadManifestOnly() in the CPU core, doLoadFull() in the facade
+    // (it performs the upload through uploadToGpu(), the single GL gate).
+    // Both drive the *same* noto3d_asset_cpu pipeline, so the CPU half cannot
+    // drift between the modes.
+    RegistryResult doLoadManifestOnly(const std::filesystem::path& manifestPath);
+    RegistryResult doLoadFull(const std::filesystem::path& manifestPath);
+
     RegistryResult buildResult() const;
 };
 

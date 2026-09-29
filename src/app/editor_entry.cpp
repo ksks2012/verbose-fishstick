@@ -1,9 +1,12 @@
 #include "editor_entry.hpp"
 
+#include <asset_cpu.hpp>
 #include <log.hpp>
 
 #include <cstdlib>
+#include <filesystem>
 #include <string>
+#include <vector>
 
 namespace noto3d::app {
 namespace {
@@ -26,17 +29,37 @@ std::string manifestPath() { return std::string(NOTO3D_ASSETS_DIR) + "/manifest.
 }  // namespace
 
 int runListAssetsCommand() {
-    asset::AssetRegistry registry;
-    const auto loadR = registry.loadManifestOnly(manifestPath());
-    for (const auto& d : loadR.diagnostics) {
+    // ADR-0012 ③ — the pre-GL diagnostic resolves its listing through the CPU
+    // core, not through AssetRegistry, so this path has no AssetRegistry in it
+    // at all and cannot reach the GL facade even in principle.
+    //
+    // It deliberately drives the SAME loadManifestCpu() pipeline that
+    // loadManifestOnly() drives, because the output includes more than the
+    // listing: every diagnostic is printed as M3_WARN, and those include
+    // per-asset geometry, up_axis and diffuseTextureRef warnings.  Calling
+    // parseManifest() alone would print the manifest lines byte-identically but
+    // silently drop those warnings — a behaviour change that today's clean
+    // manifest happens to hide.  Sharing the pipeline is what makes
+    // "identical" structural instead of accidental.
+    const std::string manifest = manifestPath();
+
+    const asset::ManifestParse parsed = asset::parseManifest(manifest);
+    std::vector<asset::LoadDiagnostic> diagnostics(parsed.diagnostics);
+    asset::CpuCache                    cache;
+    (void)asset::loadManifestCpu(parsed.entries,
+                                 std::filesystem::path(manifest).parent_path(),
+                                 cache,
+                                 diagnostics);
+
+    for (const auto& d : diagnostics) {
         NOTO3D_WARN("M3_WARN  [{}] {}", d.assetId.empty() ? "manifest" : d.assetId, d.message);
     }
     NOTO3D_INFO("M3_ASSETS version=1");
-    for (const auto& e : registry.entries()) {
+    for (const auto& e : parsed.entries) {
         NOTO3D_INFO("M3_ASSETS id='{}' geometry={} reference={}",
                     e.id, geometrySourceName(e), referenceName(e));
     }
-    NOTO3D_INFO("M3_ASSETS end count={}", static_cast<int>(registry.entries().size()));
+    NOTO3D_INFO("M3_ASSETS end count={}", static_cast<int>(parsed.entries.size()));
     return EXIT_SUCCESS;
 }
 

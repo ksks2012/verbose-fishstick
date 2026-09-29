@@ -154,7 +154,33 @@ concrete win the spike was opened to price.
   sides of the split.
 - **`tests/asset/` and the `--list-assets` diagnostic path stop linking GL.** After the split they
   depend on `noto3d_asset_cpu` (and, for the CLI, the small `AssetRegistry`-free path 0037 wires);
-  `ctest` stays green and `--list-assets` still never creates a GL context.
+  `ctest` stays green and `--list-assets` still never creates a GL context. **Amendment (0038) —
+  the `AssetRegistry` header is GL-free and the class is split across two translation units.**
+  `asset_registry.hpp` no longer includes `model.hpp`/`texture.hpp`; it re-declares
+  `renderer::Model` (`using Model = std::vector<SubMesh>` over an incomplete `SubMesh`) and
+  `renderer::Texture`, which is sound because the registry only holds them behind `shared_ptr` and
+  hands out borrowed pointers. `asset_registry_cpu.cpp` (in `noto3d_asset_cpu`) defines
+  `loadManifestOnly()`, `loadModelShapesOnly()` and every read-only accessor; `asset_registry.cpp`
+  (in `noto3d_asset`) keeps `load()`, `loadModelFile()`, `reload()` and `uploadToGpu()`. The single
+  mode-branching `doLoad(path, mode)` became two mode-specific drivers that share one
+  `noto3d_asset_cpu` pipeline, so the CPU half cannot drift between modes.
+  - **`reload()` deliberately stays in the facade.** Its contract is "repeat the last `load()` *or*
+    `loadManifestOnly()`", so a CPU-only link cannot implement it without silently dropping GPU
+    models on a Full reload — and ADR-0010 depends on `reload()` being able to invalidate borrowed
+    `DrawItem::model` pointers after a Full load. Its two test cases therefore live in a
+    GL-linked target of their own (the ticket's own escape clause), not by re-linking the CPU suite.
+  - **`loadManifestCpu()` is the one implementation of the manifest CPU pipeline** (canonicalisation,
+    GPU-dedup ordering, `fallback_geometry`, the 0013 predicate, the up-axis warning). It has three
+    callers — `loadManifestOnly()`, `load()`'s CPU half, and `--list-assets` — which is what makes
+    "the CLI output is unchanged" a structural property rather than a coincidence that holds only
+    while the manifest is clean. A `parseManifest()`-only CLI would have printed the listing lines
+    byte-identically while silently dropping every per-asset warning.
+  - **Reading the boundary from `nm`:** the CPU library contains **0 GL/glad function symbols**,
+    but `AssetRegistry`'s GPU cache members make `SubMesh`/`Texture` appear in *mangled STL
+    plumbing* names (`_Hashtable`, `__shared_ptr::get`) instantiated by the implicit destructor.
+    Those are references to **incomplete** types — the include-closure guard, not the symbol
+    names, is the authoritative check. This is the unavoidable cost of ①b: one registry owns both
+    caches, so the CPU half must be able to destroy them.
 - **`noto3d_app` and the `noto3d-editor` executable are unchanged** (they already needed the GPU
   facade for `collectDrawItems` / `--demo` / the main render loop). M4's single-seam contract
   (`collectDrawItems(scene, resolver)`) is untouched.
@@ -194,7 +220,7 @@ concrete win the spike was opened to price.
 ## Execution (tracer bullets)
 
 Implementation is split into small tickets, **CPU-first**, so each step is independently green.
-No ticket changes observable behaviour; the full ctest suite (21/21 dev + release today) plus the
+No ticket changes observable behaviour; the full ctest suite (22/22 dev + release since 0038) plus the
 `--list-assets` pre-GL path and the 0024/0033 CLI matrices must stay green throughout.
 
 - **0036** — extract `renderer::Vertex` into a GL-free `vertex.hpp`; narrow `obj_loader.hpp` /

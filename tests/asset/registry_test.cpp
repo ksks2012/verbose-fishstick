@@ -67,6 +67,31 @@ struct TempFile {
     TempFile& operator=(const TempFile&) = delete;
 };
 
+// RAII symlink-cycle fixture.  A missing file is NOT enough: weakly_canonical()
+// tolerates non-existent components, so a bogus fallback_geometry resolves fine
+// and never reaches the catch.  A symlink cycle is what actually makes
+// canonicalisation fail with ELOOP, which is the branch under test.
+struct TempSymlinkCycle {
+    std::filesystem::path path;
+
+    explicit TempSymlinkCycle(const char* name) {
+        path = std::filesystem::temp_directory_path() / name;
+        std::error_code ec;
+        std::filesystem::remove(path, ec);   // stale cleanup
+        std::filesystem::remove(std::filesystem::temp_directory_path() /
+                                    (std::string(name) + "2"), ec);
+        std::filesystem::create_symlink(path.filename().string(), path);
+        std::filesystem::create_symlink(path.filename().string() + "2", path.string() + "2");
+    }
+    ~TempSymlinkCycle() {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        std::filesystem::remove(path.string() + "2", ec);
+    }
+    TempSymlinkCycle(const TempSymlinkCycle&)            = delete;
+    TempSymlinkCycle& operator=(const TempSymlinkCycle&) = delete;
+};
+
 // ---------------------------------------------------------------------------
 // Test groups
 // ---------------------------------------------------------------------------
@@ -358,30 +383,6 @@ void testTriStateOverall() {
     }
 }
 
-void testReload() {
-    const std::filesystem::path manifest(NOTO3D_ASSETS_DIR "/manifest.json");
-    AssetRegistry reg;
-    const auto first = reg.loadManifestOnly(manifest);
-    check(first.overall != LoadStatus::Failed, "reload: initial load not Failed");
-
-    const std::size_t firstCount = reg.entries().size();
-    check(firstCount > 0, "reload: entries present after first load");
-
-    const auto r2 = reg.reload();
-    check(r2.overall != LoadStatus::Failed,      "reload: succeeds");
-    check(reg.entries().size() == firstCount,    "reload: same entry count");
-    check(reg.findEntry("smile") != nullptr,     "reload: smile still present");
-}
-
-void testReloadBeforeLoad() {
-    AssetRegistry reg;
-    const auto r = reg.reload();
-    check(r.overall == LoadStatus::Failed,
-          "reload before load: returns Failed");
-    check(!r.diagnostics.empty(),
-          "reload before load: diagnostic present");
-}
-
 void testReferenceImageNeverTexture() {
     // ADR-0002: reference_image is metadata-only and must never be uploaded as a GL texture.
     // Structural guarantee: the registry only looks at diffuseTextureRef for texture upload,
@@ -463,6 +464,61 @@ void testPathSafety() {
         check(r.overall == LoadStatus::Failed,
               "path-safety: '../' traversal → Failed");
     }
+}
+
+// ADR-0012 ③ — the manifest CPU pipeline's GPU-dedup ordering, tested directly.
+//
+// This cannot be reached through AssetRegistry in a GL-free build: the probe only
+// ever answers true in Full mode, which needs a GL context.  loadManifestCpu() is
+// a public CPU entry point, so the ordering is asserted headlessly instead.
+//
+// The invariant: an entry that short-circuits to an already-uploaded model must
+// STILL report an unresolvable fallback_geometry as a warning.  The pre-split
+// code resolved fallback_geometry before the GPU cache check, so moving the
+// probe ahead of it silently dropped the diagnostic — and stopped degrading
+// `overall` — for exactly these entries.  No MVP asset sets fallback_geometry, so
+// the frozen manifest never exercised it.
+void testGpuDedupOrderingKeepsFallbackWarning() {
+    TempFile obj("noto3d_t_order.obj",
+                 "v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nvt 0 0\nf 1/1/1 2/1/1 3/1/1\n");
+    // fallback_geometry points at a symlink cycle so canonicalisation really
+    // throws (a merely missing file would resolve and never reach the catch).
+    TempSymlinkCycle cycle("noto3d_t_order_loop");
+    TempManifest m(R"({
+        "manifest_version": 1,
+        "assets": [
+            { "id": "shared", "geometry": "noto3d_t_order.obj",
+              "geometry_source": "placeholder", "axis_data": { "up_axis": "y" },
+              "fallback_geometry": "noto3d_t_order_loop" }
+        ]
+    })");
+
+    const ManifestParse parsed = parseManifest(m.path);
+    check(parsed.entries.size() == 1, "probe: manifest entry parsed");
+
+    // A probe that claims every key, i.e. "this model is already on the GPU".
+    CpuCache cache;
+    std::vector<LoadDiagnostic> diagnostics;
+
+    const auto loads = loadManifestCpu(parsed.entries, m.path.parent_path(), cache,
+                                       diagnostics, [](std::string_view) { return true; });
+
+    check(loads.size() == 1, "probe: one outcome per entry");
+    check(loads[0].origin == CpuEntryLoad::Origin::AlreadyUploaded,
+          "probe: probe hit short-circuits the CPU parse");
+    check(cache.size() == 0,
+          "probe: short-circuited entry is not CPU-parsed (dedup fast path)");
+    check(loads[0].status == LoadStatus::Success,
+          "probe: short-circuited entry reports Success");
+
+    bool sawFallbackWarning = false;
+    for (const auto& d : diagnostics) {
+        if (d.message.find("fallback path resolution error") != std::string::npos) {
+            sawFallbackWarning = true;
+        }
+    }
+    check(sawFallbackWarning,
+          "probe: unresolvable fallback_geometry still warns when the GPU probe hits");
 }
 
 void testCanonicalPathDedup() {
@@ -683,10 +739,9 @@ int main() {
     testObjLoaderMaterialGrouping();
     testAxisBaking();
     testTriStateOverall();
-    testReload();
-    testReloadBeforeLoad();
     testReferenceImageNeverTexture();
     testPathSafety();
+    testGpuDedupOrderingKeepsFallbackWarning();
     testCanonicalPathDedup();
     testDemoCheckerFixture();
     testTexturePathSafety();

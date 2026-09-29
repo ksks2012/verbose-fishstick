@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include <cstddef>
+#include <exception>
 #include <fstream>
 #include <optional>
 #include <string>
@@ -169,6 +170,37 @@ bool scanUnsafeTextureRefs(std::vector<LoadDiagnostic>& out,
     return hasUnsafe;
 }
 
+// The shared per-entry epilogue — see validateCpuRecord() in the header.
+CpuValidation validateCpuRecord(const CpuObj&               cpu,
+                                std::string_view             label,
+                                const std::string&           upAxis,
+                                std::vector<LoadDiagnostic>& out) {
+    appendCpuDiagnostics(out, cpu, label);
+
+    CpuValidation v;
+    if (cpu.status == LoadStatus::Failed) {
+        // A failed parse is diagnosed and nothing else applies to it — the same
+        // point at which the pipeline stopped before the rules were shared.
+        v.failed = true;
+        return v;
+    }
+
+    // Defensive: only x/y/z are known axes; unknown → no correction + warning
+    if (upAxis != "x" && upAxis != "y" && upAxis != "z") {
+        v.unsupportedAxis = true;
+        out.push_back({std::string(label),
+            "unsupported up_axis '" + upAxis + "'; no axis correction applied",
+            LoadStatus::LoadedWithWarnings});
+    }
+
+    // Ticket 0013: validate diffuseTextureRef paths in the CPU data using the
+    // same ADR-0007 predicate applied to manifest geometry paths.  An unsafe ref
+    // (absolute or '../') promotes the asset to LOADED_WITH_WARNINGS; the
+    // geometry is still uploaded, but the texture is skipped.
+    v.unsafeTextureRef = scanUnsafeTextureRefs(out, cpu, label);
+    return v;
+}
+
 // ---------------------------------------------------------------------------
 // RegistryResult aggregation
 // ---------------------------------------------------------------------------
@@ -223,6 +255,112 @@ void CpuCache::clear() noexcept {
 
 std::size_t CpuCache::size() const noexcept {
     return m_records.size();
+}
+
+// ---------------------------------------------------------------------------
+// The manifest CPU pipeline
+// ---------------------------------------------------------------------------
+
+std::vector<CpuEntryLoad> loadManifestCpu(std::span<const AssetEntry>  entries,
+                                          const std::filesystem::path& manifestDir,
+                                          CpuCache&                    cache,
+                                          std::vector<LoadDiagnostic>& diagnostics,
+                                          const GpuDedupProbe&         gpuOwns) {
+    using Origin = CpuEntryLoad::Origin;
+
+    std::vector<CpuEntryLoad> out;
+    out.reserve(entries.size());
+
+    for (const auto& entry : entries) {
+        CpuEntryLoad rec;
+        rec.id = entry.id;
+
+        if (!entry.geometry) {
+            // Geometry-less asset: valid, never a failure (ADR-0007)
+            rec.origin = Origin::GeometryLess;
+            rec.status = LoadStatus::Success;
+            out.push_back(std::move(rec));
+            continue;
+        }
+
+        // Canonical absolute path for dedup (ADR-0007)
+        std::filesystem::path canonPath;
+        try {
+            canonPath = std::filesystem::weakly_canonical(manifestDir / *entry.geometry);
+        } catch (const std::exception& e) {
+            diagnostics.push_back({entry.id,
+                std::string("path resolution error: ") + e.what(), LoadStatus::Failed});
+            out.push_back(std::move(rec));  // status stays Failed
+            continue;
+        }
+        const std::string canonKey = canonPath.string();
+        rec.textureBaseDir        = canonPath.parent_path();
+
+        // Fallback candidate path (ADR-0007): explicit opt-in, same safety rules.
+        // Only used if the primary geometry fails to load; no fallback system test
+        // in M2 (all MVP assets leave it unset).
+        //
+        // Resolved BEFORE the GPU dedup probe, matching the pre-split order: an
+        // unresolvable fallback_geometry is a per-entry warning in its own right
+        // and is reported even when the entry then short-circuits to an
+        // already-uploaded model.  Moving this below the probe would silently
+        // drop that diagnostic (and stop degrading `overall`) for exactly those
+        // entries — reachable only by a hand-written manifest, which is why no
+        // test covered it until the review.
+        std::optional<std::filesystem::path> fallbackPath;
+        if (entry.fallbackGeometry) {
+            try {
+                fallbackPath =
+                    std::filesystem::weakly_canonical(manifestDir / *entry.fallbackGeometry);
+            } catch (const std::exception& e) {
+                diagnostics.push_back({entry.id,
+                    std::string("fallback path resolution error: ") + e.what(),
+                    LoadStatus::LoadedWithWarnings});
+            }
+        }
+
+        // GPU dedup fast-path: shared immutable Model already uploaded (Full only).
+        // Checked BEFORE the CPU parse so the second of two entries sharing a
+        // geometry path reports Success with no parse and no diagnostics.
+        if (gpuOwns && gpuOwns(canonKey)) {
+            rec.origin   = Origin::AlreadyUploaded;
+            rec.status   = LoadStatus::Success;
+            rec.cacheKey  = canonPath;
+            out.push_back(std::move(rec));
+            continue;
+        }
+
+        // CPU load with dedup by canonical path — shared, immutable, parsed once
+        // (this library owns the parse; the registry owns the cache).
+        auto        cpu     = cache.loadRecord(canonPath, entry.id, entry.upAxis);
+        std::string loadKey = canonKey;
+        if (cpu->status == LoadStatus::Failed && fallbackPath &&
+            fallbackPath->string() != canonKey) {
+            const auto fb = cache.loadRecord(*fallbackPath, entry.id, entry.upAxis);
+            if (fb->status != LoadStatus::Failed) {
+                loadKey = fallbackPath->string();
+                cpu     = fb;
+                diagnostics.push_back({entry.id,
+                    "geometry failed; explicit fallback_geometry used",
+                    LoadStatus::LoadedWithWarnings});
+            }
+            // fallback also failed → primary failure stands (diagnosed below)
+        }
+
+        const auto v = validateCpuRecord(*cpu, entry.id, entry.upAxis, diagnostics);
+        if (v.failed) {
+            out.push_back(std::move(rec));  // status stays Failed
+            continue;
+        }
+
+        rec.origin   = Origin::Cpu;
+        rec.status   = v.unsafeTextureRef ? LoadStatus::LoadedWithWarnings : cpu->status;
+        rec.cpu      = std::move(cpu);
+        rec.cacheKey = loadKey;
+        out.push_back(std::move(rec));
+    }
+
+    return out;
 }
 
 }  // namespace noto3d::asset
