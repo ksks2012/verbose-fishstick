@@ -1,8 +1,14 @@
 #include "transform_edit.hpp"
 #include "log.hpp"
 
+#include <spdlog/sinks/base_sink.h>
+
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <mutex>
+#include <string>
+#include <vector>
 
 namespace {
 
@@ -24,10 +30,39 @@ bool nearVec(const glm::vec3& a, const glm::vec3& b, float tol = 1e-4f) {
 using namespace noto3d::app;
 using namespace noto3d::scene;
 
+// Log-capture seam so the M5_XFRM dual-unit contract is ASSERTED, not just
+// printed (ticket 0033: transform commits including the dual-unit line are
+// covered by structured runtime-log assertions).
+class CaptureSink final : public spdlog::sinks::base_sink<std::mutex> {
+public:
+    std::vector<std::string> lines;
+    void clear() { lines.clear(); }
+
+protected:
+    void sink_it_(const spdlog::details::log_msg& msg) override {
+        spdlog::memory_buf_t buf;
+        formatter_->format(msg, buf);
+        lines.emplace_back(buf.data(), buf.size());
+    }
+    void flush_() override {}
+};
+
+bool logHas(const std::vector<std::string>& lines, const std::string& needle) {
+    return std::any_of(lines.begin(), lines.end(),
+                       [&](const std::string& l) {
+                           return l.find(needle) != std::string::npos;
+                       });
+}
+
 }  // namespace
 
 int main() {
     noto3d::core::log_init("noto3d-transform-edit-tests");
+
+    // Attach capture sink (alongside the normal stdout sink) so structured-log
+    // assertions can verify the M5_XFRM format contract (ticket 0033).
+    std::shared_ptr<CaptureSink> capture = std::make_shared<CaptureSink>();
+    spdlog::default_logger()->sinks().push_back(capture);
 
     // ── degreesToRadians ────────────────────────────────────────────────────
     check(near(degreesToRadians(0.0f),    0.0f),             "0 deg -> 0 rad");
@@ -173,6 +208,44 @@ int main() {
         ed.destroyEntity(id);
         check(!ed.entityName(id).has_value(),
               "entityName: nullopt after destroy");
+    }
+
+    // ── M5_XFRM dual-unit log format contract (ticket 0033) ─────────────────
+    // The commit functions must log BOTH display units (degrees) AND stored
+    // units (radians) so the log evidence matches what the user saw (ADR-0011 Q8/Q13).
+    {
+        capture->clear();
+        Editor ed;
+        const auto id = ed.createEntity("logTest", "cube");
+        ed.select(id);
+
+        // commitRotation: yaw=90 deg → emits M5_XFRM with both units
+        commitRotation(ed, id, {0.0f, 90.0f, 0.0f});
+
+        // The line must carry "M5_XFRM" marker
+        check(logHas(capture->lines, "M5_XFRM"),
+              "M5_XFRM: log line present on rotation commit");
+        // "entity='logTest'" — entity name in log
+        check(logHas(capture->lines, "entity='logTest'"),
+              "M5_XFRM: entity name present in log");
+        // Dual-unit format: display value "90.000deg" AND stored value "(1.5708rad)"
+        check(logHas(capture->lines, "90.000deg"),
+              "M5_XFRM: displayed degrees present");
+        check(logHas(capture->lines, "1.5708rad"),
+              "M5_XFRM: stored radians present (dual-unit, ADR-0011 Q13)");
+
+        // commitPosition: no degree conversion, just XYZ
+        capture->clear();
+        commitPosition(ed, id, {1.0f, 2.0f, 3.0f});
+        check(logHas(capture->lines, "M5_XFRM"),   "M5_XFRM: position commit logged");
+        check(logHas(capture->lines, "position"),   "M5_XFRM: 'position' keyword");
+        check(logHas(capture->lines, "x=1.000"),    "M5_XFRM: position x value");
+
+        // commitScale
+        capture->clear();
+        commitScale(ed, id, {2.0f, 2.0f, 2.0f});
+        check(logHas(capture->lines, "M5_XFRM"),   "M5_XFRM: scale commit logged");
+        check(logHas(capture->lines, "scale"),      "M5_XFRM: 'scale' keyword");
     }
 
     if (g_failures == 0) { NOTO3D_INFO("ALL PASS"); return EXIT_SUCCESS; }

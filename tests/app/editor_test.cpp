@@ -1,8 +1,13 @@
 #include "editor.hpp"
 #include "log.hpp"
 
+#include <spdlog/sinks/base_sink.h>
+
+#include <algorithm>
 #include <cstdlib>
+#include <mutex>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -16,10 +21,32 @@ void check(bool cond, const char* name) {
 using namespace noto3d::app;
 using namespace noto3d::scene;
 
+// Log capture seam so the M5_SEL selection line is ASSERTED (ticket 0033 close
+// matrix: "selection" must be observable in the structured runtime log).
+class CaptureSink final : public spdlog::sinks::base_sink<std::mutex> {
+public:
+    std::vector<std::string> lines;
+
+protected:
+    void sink_it_(const spdlog::details::log_msg& msg) override {
+        spdlog::memory_buf_t formatted;
+        formatter_->format(msg, formatted);
+        lines.emplace_back(formatted.data(), formatted.size());
+    }
+    void flush_() override {}
+};
+
+bool logHas(const std::vector<std::string>& lines, const std::string& needle) {
+    return std::any_of(lines.begin(), lines.end(),
+                       [&](const std::string& l) { return l.find(needle) != std::string::npos; });
+}
+
 }  // namespace
 
 int main() {
     noto3d::core::log_init("noto3d-editor-tests");
+    auto capture = std::make_shared<CaptureSink>();
+    spdlog::default_logger()->sinks().push_back(capture);
 
     // ── createEntity / entityCount / hierarchyItems ──────────────────────────
     {
@@ -120,10 +147,22 @@ int main() {
         check(ed.hasSelection(),                "select: hasSelection true");
         check(ed.selectedName()    && *ed.selectedName()    == "smile",  "selectedName");
         check(ed.selectedAssetId() && *ed.selectedAssetId() == "smile", "selectedAssetId");
+        check(logHas(capture->lines,
+                     "M5_SEL  entity='smile' id=" +
+                         std::to_string(static_cast<unsigned>(id))),
+              "select: logged M5_SEL with entity name and id");
 
         ed.deselect();
         check(!ed.hasSelection(),               "deselect: hasSelection false");
         check(ed.selectedId() == InvalidEntityId, "deselect: selectedId == Invalid");
+
+        // selection now covered by M5_SEL assertion (above); add a count check
+        // that deselect does NOT log a second M5_SEL line (silent deselect).
+        check(std::count_if(capture->lines.begin(), capture->lines.end(),
+                            [](const std::string& l) {
+                                return l.find("M5_SEL  entity=") != std::string::npos;
+                            }) == 1,
+              "select: exactly one M5_SEL line (deselect is silent)");
     }
 
     // ── selection survives frames (persistence) ──────────────────────────────

@@ -294,6 +294,24 @@ target_link_libraries(noto3d_app
 noto3d_set_warnings(noto3d_app)
 noto3d_apply_sanitizers(noto3d_app)
 
+# Architecture guard — enforced at configure time (ADR-0011 Q5).
+# noto3d_app must never link ImGui or GLFW; the app layer is headless by contract.
+# The test binaries linking noto3d_app (editor-tests, transform-edit-tests, etc.)
+# run without a DISPLAY, which serves as the empirical runtime confirmation.
+get_target_property(_noto3d_app_link_libs noto3d_app LINK_LIBRARIES)
+foreach(_lib IN LISTS _noto3d_app_link_libs)
+    if("${_lib}" STREQUAL "imgui"  OR "${_lib}" STREQUAL "glfw"  OR
+       "${_lib}" STREQUAL "GLFW"   OR "${_lib}" STREQUAL "glfw3" OR
+       "${_lib}" STREQUAL "OpenGL::GL")
+        message(FATAL_ERROR
+            "[arch-guard] noto3d_app links '${_lib}' — the app layer must link "
+            "neither ImGui nor GLFW (ADR-0011 Q5).  Move the dependency to "
+            "noto3d_ui or the executable instead.")
+    endif()
+endforeach()
+unset(_noto3d_app_link_libs)
+unset(_lib)
+
 add_executable(noto3d-app-tests tests/app/draw_list_test.cpp)
 target_link_libraries(noto3d-app-tests PRIVATE noto3d_app noto3d_core)
 noto3d_set_warnings(noto3d-app-tests)

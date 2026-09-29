@@ -3,10 +3,15 @@
 
 #include <asset_registry.hpp>
 
+#include <spdlog/sinks/base_sink.h>
+
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -19,6 +24,28 @@ void check(bool cond, const char* name) {
 
 using namespace noto3d::app;
 using namespace noto3d::asset;
+
+// Log-capture seam for M5_ASSET assertions (ticket 0033).
+class CaptureSink final : public spdlog::sinks::base_sink<std::mutex> {
+public:
+    std::vector<std::string> lines;
+    void clear() { lines.clear(); }
+
+protected:
+    void sink_it_(const spdlog::details::log_msg& msg) override {
+        spdlog::memory_buf_t buf;
+        formatter_->format(msg, buf);
+        lines.emplace_back(buf.data(), buf.size());
+    }
+    void flush_() override {}
+};
+
+bool logHas(const std::vector<std::string>& lines, const std::string& needle) {
+    return std::any_of(lines.begin(), lines.end(),
+                       [&](const std::string& l) {
+                           return l.find(needle) != std::string::npos;
+                       });
+}
 
 // RAII temp manifest — writes inline JSON, removes on destruction.
 // Geometry paths are resolved relative to its directory (temp dir).
@@ -75,6 +102,10 @@ f 1/1/1 2/1/1 3/1/1
 int main() {
     noto3d::core::log_init("noto3d-asset-picker-tests");
 
+    // Attach capture sink so M5_ASSET log assertions can be verified (ticket 0033).
+    std::shared_ptr<CaptureSink> capture = std::make_shared<CaptureSink>();
+    spdlog::default_logger()->sinks().push_back(capture);
+
     // ── Snapshot construction from a mixed manifest ──────────────────────────
     // Two renderable entries + one reference-only entry → renderable-only rule.
     {
@@ -95,6 +126,9 @@ int main() {
         check(snap.renderableCount == 2, "snapshot: renderableCount == 2");
         check(snap.hiddenCount     == 1, "snapshot: hiddenCount == 1 (reference-only)");
         check(snap.choices.size()  == 2, "snapshot: choices.size() == renderableCount");
+        // M5_ASSET log assertion (ticket 0033): offered/hidden counts observable
+        check(logHas(capture->lines, "M5_ASSET asset-picker n=2 hidden=1"),
+              "snapshot: M5_ASSET log n=2 hidden=1");
 
         // Typed values, in registry order; display text is NOT pre-formatted.
         if (snap.choices.size() == 2) {
@@ -130,6 +164,8 @@ int main() {
         check(snap.renderableCount == 0, "ref-only manifest: renderableCount == 0");
         check(snap.hiddenCount     == 2, "ref-only manifest: hiddenCount == 2");
         check(snap.choices.empty(),      "ref-only manifest: no choices offered");
+        check(logHas(capture->lines, "M5_ASSET asset-picker n=0 hidden=2"),
+              "ref-only: M5_ASSET log n=0 hidden=2");
     }
 
     // ── commitAssetAssignment: effect on the Scene is LIMITED to assetId ─────
@@ -147,6 +183,11 @@ int main() {
         check(items.size() == 2, "commit: entity count unchanged");
         check(items[0].assetId == "warm",  "commit: smile assetId reassigned");
         check(items[1].assetId == "crown", "commit: other entity unaffected");
+        // M5_ASSET asset-assigned log assertion (ticket 0033)
+        check(logHas(capture->lines, "M5_ASSET asset-assigned"),
+              "commit: M5_ASSET asset-assigned log present");
+        check(logHas(capture->lines, "assetId='warm'"),
+              "commit: assigned assetId in log");
 
         // Two entities could be on the same asset and stay independent.
         commitAssetAssignment(ed, idCrown, "warm");
