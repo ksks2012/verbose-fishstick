@@ -161,9 +161,12 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
 - ADR-0010: M4 scene composition (grilling Q1–Q8, locked; hardened pre-implementation by an
   Amendment — camera spherical convention/initial state/signs, `--demo` = demo-only scene,
   `DrawItem` pointer lifetime + callable-Resolver, verification tiers). Pure-data Scene (`EntityId`
-  monotonic from 1 / `0`=Invalid / never reused / id≠index; flat world-space Entities;
+  monotonic from 1 / `0`=Invalid / never reused **within one Scene lifetime** / id≠index;
+  flat world-space Entities;
   `scene::modelMatrix` = radians YXZ T·R·S; `clear()` keeps the counter; M6 = snapshot-replace
-  forward contract). Resolution stays out of Scene: `app::collectDrawItems(scene, resolver)` →
+  forward contract — **amended by ADR-0013 Q1: a restore begins a NEW Scene lifetime, so the
+  allocator is re-derived as `max(restored) + 1` and a destroyed high-water id may reappear;
+  `Scene::fromEntities` is the only entry that can do this, and it has no counter setter**). Resolution stays out of Scene: `app::collectDrawItems(scene, resolver)` →
   per-entity `DrawItem`s, unresolved → skip (headless 0021 contract), one seam for every CLI path
   (default `m4_vertical_scene` fixture, `--asset` single-entity, `--demo` demo-only Scene with
   exactly one `demo_checker` Entity at identity;
@@ -349,11 +352,43 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   - Verification: red-first TDD, ctest **15/15 dev + release**, 0024 exit-code matrix and
     `xprop` titles unchanged.
 
-### M6 (spec embedded in ADR-0013; tickets written, execution not started)
-- 0041 (`noto3d_serialization` target + arch guard proven to fire) · 0042 (`Scene` restore primitive
-  + `Editor::replaceScene(Scene)`) · 0043 (v1 round-trip happy path) · 0044 (strict structure /
-  lenient references) · 0045 (CLI `--scene=` + `--save-scene=` + atomic I/O) · 0046 (M6 close) — all
-  `ready-for-agent`; blocking chain 0041‖0042 → 0043 → 0044 → 0045 → 0046
+### M6 (spec embedded in ADR-0013; execution started)
+- 0041 (`noto3d_serialization` target + arch guard proven to fire) — **complete 2026-09-30**:
+  target links `noto3d_scene` PUBLIC + nlohmann/json PRIVATE; the shared
+  `noto3d_assert_target_reaches_no_gl()` gained a `POLICY` keyword (`interchange` default /
+  `closed`) so one function serves both boundaries instead of a per-target twin, and guard messages
+  now cite the caller's own ADR; the serializer runs `POLICY closed` (no `src/renderer/`,
+  `src/asset/`, `src/ui/`). A defect found while proving it: `-M` echoes a relative include
+  un-normalized, so the new project-header match silently missed `../asset/x.hpp` — fixed by
+  normalizing closure paths, which also closes the same `../renderer/` bypass on the pre-existing
+  policy. Five guard violations proven to abort configure; ctest 22/22 dev + release, both close
+  matrices ALL PASS, `--graphviz` shows `noto3d_serialization → noto3d_scene` with nlohmann dotted
+  (PRIVATE) and 0 GL symbols in the archive.
+- 0042 (`Scene` restore primitive + `Editor::replaceScene(Scene)`) — **complete 2026-09-30**:
+  `static Scene Scene::fromEntities(std::vector<Entity>)` is the only way to build a Scene
+  carrying pre-existing ids (it did not exist before — `nextEntityId_` is private with no setter).
+  The allocator is **derived, never accepted**: no setter, no `(entities, nextId)` overload, so
+  `max(restored ids) + 1` is a type-level property. Precondition (non-zero, unique ids) is an
+  `assert` in debug and undefined in release — a contract marker following `draw_list.cpp:18`,
+  **not** a validation path; document validation stays solely in 0044. `Editor::replaceScene`
+  takes the Scene **by value** so the entity set and the derived allocator cross the boundary
+  together, then `deselect()`s (selection is session state, never persisted). Save needed no new
+  API. 7 mutations run as a red-green proof across **both** suites, **0 vacuous**; three findings:
+  the ticket's Q1 bullet said "equals the pre-destroy maximum (`max+1`)" but `max+1` of the
+  *survivors* is the destroyed value itself, so the parenthetical contradicted the ticket's own
+  invariant and ADR-0013 Q1 (the implementation was right, the test was corrected); a
+  `!hasSelection()` / `selectedName()` assertion after a swap is **vacuous** whenever the old id
+  no longer resolves, so the suite instead pins the case where the restored scene *contains* the
+  selected id, which is what a real load can produce; and `decltype(&Editor::replaceScene)` is
+  compared against the whole signature `void (Editor::*)(Scene) noexcept`, because a mere
+  callability check would also pass for the `Scene&` spelling ADR-0011 forbids.
+  Scene suite `check()` 29 → 46, editor suite 62 → 76 plus 2 `static_assert`s; ctest 22/22 dev +
+  release, both close matrices ALL PASS. This change also amends the M4 `EntityId` line below,
+  which stated "never reused" flatly and so contradicted the pinned Q1 reuse.
+- 0043 (v1 round-trip happy path) · 0044 (strict structure / lenient references) · 0045 (CLI
+  `--scene=` + `--save-scene=` + atomic I/O) · 0046 (M6 close) — all `ready-for-agent`; blocking
+  chain 0041‖0042 → 0043 → 0044 → 0045 → 0046, and with both 0041 and 0042 now complete,
+  **0043 is unblocked**
 
 ### M5 (spec embedded in ADR-0011; implemented, machine-verified, tickets archived)
 - 0028 (docked shell + `ViewportRect` + input-ownership gate) — complete, archived (headless

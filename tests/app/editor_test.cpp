@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <mutex>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -266,6 +268,100 @@ int main() {
         check(ed.destroyEntity(idA),               "no-op: real id returns true");
         check(!ed.destroyEntity(idA),              "no-op: already-destroyed id returns false");
         check(ed.entityCount() == 0, "no-op: no entities created or resurrected");
+    }
+
+    // ── replaceScene: the single load injection point (ADR-0013 Q6) ──────────
+    {
+        // The M5 type boundary is a *type* property, so pin it with
+        // static_assert rather than prose.  Note the second assert: a plain
+        // `is_callable`-style check would also pass for a `Scene&` parameter,
+        // which is exactly the spelling ADR-0011 forbids.  Taking the address of
+        // the member and comparing the whole signature pins the parameter type
+        // itself, so by-value stops being a claim about the header.
+        static_assert(
+            std::is_same_v<decltype(std::declval<const Editor&>().scene()),
+                           const Scene&>,
+            "Editor::scene() must keep returning const Scene& — M5 type boundary");
+        static_assert(
+            std::is_same_v<decltype(&Editor::replaceScene),
+                           void (Editor::*)(Scene) noexcept>,
+            "replaceScene must take Scene BY VALUE, return void and be noexcept — a "
+            "Scene& or Scene&& parameter would breach the M5 type boundary.  "
+            "noexcept is part of the type since C++17, so this pins that too.");
+
+        Editor ed;
+        const auto original = ed.createEntity("original", "smile");
+        ed.select(original);
+        check(ed.hasSelection(), "replaceScene: a selection exists beforehand");
+
+        // A restored Scene built in memory — no file I/O in this ticket.
+        Entity r1; r1.id = 41; r1.name = "restored-one"; r1.assetId = "crown";
+        r1.transform.position = glm::vec3(1.0f, 0.0f, 0.0f);
+        Entity r2; r2.id = 12; r2.name = "restored-two"; r2.assetId = "sun";
+        auto restored = Scene::fromEntities({r1, r2});
+
+        ed.replaceScene(std::move(restored));
+
+        check(ed.entityCount() == 2, "replaceScene: the supplied entities are in place");
+        const auto items = ed.hierarchyItems();
+        check(items.size() == 2 && items[0].id == 41 && items[0].name == "restored-one" &&
+                  items[0].assetId == "crown" && items[1].id == 12 &&
+                  items[1].name == "restored-two" && items[1].assetId == "sun",
+              "replaceScene: the entities are exactly the ones supplied, in order");
+        check(ed.entityName(original) == std::nullopt,
+              "replaceScene: the previous scene's entities are gone");
+
+        // Selection is editor-session state, not persisted data (Q2/Q6).
+        check(!ed.hasSelection(), "replaceScene: selection is cleared");
+        check(ed.selectedId() == InvalidEntityId,
+              "replaceScene: selectedId is InvalidEntityId after the swap");
+
+        // The derived allocator travelled with the scene.
+        const auto nextId = ed.createEntity("added", "warm");
+        check(nextId == 42, "replaceScene: the derived allocator survives the swap");
+    }
+
+    // ── replaceScene: a selection that WOULD still resolve must still die ────
+    //
+    // The block above cannot distinguish a real deselect() from no
+    // deselect() at all: `hasSelection()`/`selectedName()` both go through
+    // findEntity(selection_), and the previously selected id no longer exists,
+    // so they report "nothing selected" either way.  The dangerous case is the
+    // opposite one — a restored scene that HAPPENS TO contain the same id — so
+    // that is what this block pins.
+    {
+        Editor ed;
+        const auto id = ed.createEntity("local", "smile");
+        ed.select(id);
+        check(ed.selectedName().value_or("") == "local",
+              "collide: the id is selected and resolvable before the swap");
+
+        Entity sameId;
+        sameId.id      = id;  // the restored scene reuses the selected id
+        sameId.name    = "restored-but-different";
+        sameId.assetId = "crown";
+        ed.replaceScene(Scene::fromEntities({sameId}));
+
+        check(ed.entityName(id).value_or("") == "restored-but-different",
+              "collide: the same id DOES exist in the new scene, under a new name");
+        check(ed.selectedId() == InvalidEntityId,
+              "collide: a resolvable id is still not selected after replaceScene");
+        check(!ed.hasSelection(),
+              "collide: hasSelection() is false even though the id resolves");
+        check(ed.selectedName() == std::nullopt,
+              "collide: selectedName() is nullopt, not the restored entity's name");
+    }
+
+    // ── replaceScene: a stale selection cannot survive ───────────────────────
+    {
+        Editor ed;
+        const auto id = ed.createEntity("a", "a");
+        ed.select(id);
+        ed.replaceScene(Scene::fromEntities({}));
+        check(!ed.hasSelection(), "replaceScene: selecting then replacing an empty "
+                                  "scene leaves nothing selected");
+        check(ed.selectedId() == InvalidEntityId,
+              "replaceScene: no dangling selection after replacing with an empty set");
     }
 
     if (g_failures == 0) { NOTO3D_INFO("ALL PASS"); return EXIT_SUCCESS; }

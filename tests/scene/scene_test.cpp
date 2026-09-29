@@ -9,6 +9,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -44,6 +46,7 @@ bool vecNear(const glm::vec3& a, const glm::vec3& b, float eps = 1e-5f) {
 
 using noto3d::scene::InvalidEntityId;
 using noto3d::scene::Scene;
+using noto3d::scene::modelMatrix;
 
 void testIdentityAndStorage() {
     Scene s;
@@ -150,6 +153,110 @@ void testModelMatrix() {
     check(matNear(mComp, tTrs), "modelMatrix == T·(R·S) element-wise");
 }
 
+void testRestorePreservesEverything() {
+    // A restored entity set must survive field-for-field, in the order given.
+    // The ids are deliberately NOT ascending (7, 3, 11) so a sorting
+    // implementation cannot pass by accident.
+    noto3d::scene::Entity a;
+    a.id      = 7;
+    a.name    = "alpha";
+    a.assetId = "smile";
+    a.transform.position = glm::vec3(1.0f, 2.0f, 3.0f);
+    a.transform.rotation = glm::vec3(0.1f, 0.2f, 0.3f);
+    a.transform.scale    = glm::vec3(4.0f, 5.0f, 6.0f);
+
+    noto3d::scene::Entity b;
+    b.id      = 3;
+    b.name    = "beta";
+    b.assetId = "crown";
+    b.transform.position = glm::vec3(-1.0f, 0.5f, 2.5f);
+
+    noto3d::scene::Entity c;
+    c.id      = 11;
+    c.name    = "gamma";
+    c.assetId = "sun";
+
+    auto restored = Scene::fromEntities({a, b, c});
+
+    const auto es = restored.entities();
+    check(es.size() == 3, "restore: entity count preserved");
+    check(es.size() == 3 && es[0].id == 7 && es[1].id == 3 && es[2].id == 11,
+          "restore: ids preserved in the given order (not sorted)");
+    check(es.size() == 3 && es[0].name == "alpha" && es[1].name == "beta" &&
+              es[2].name == "gamma",
+          "restore: names preserved");
+    check(es.size() == 3 && es[0].assetId == "smile" && es[1].assetId == "crown" &&
+              es[2].assetId == "sun",
+          "restore: assetIds preserved");
+    check(es.size() == 3 && vecNear(es[0].transform.position, a.transform.position) &&
+              vecNear(es[0].transform.rotation, a.transform.rotation) &&
+              vecNear(es[0].transform.scale, a.transform.scale) &&
+              vecNear(es[1].transform.position, b.transform.position) &&
+              vecNear(es[2].transform.position, c.transform.position),
+          "restore: transforms preserved field-for-field");
+    check(es.size() == 3 && matNear(modelMatrix(es[0].transform),
+                                   modelMatrix(a.transform)),
+          "restore: modelMatrix of a restored entity is unchanged");
+    check(es.size() == 3 && restored.findEntity(3) != nullptr &&
+              restored.findEntity(3)->name == "beta",
+          "restore: findEntity resolves a restored id");
+}
+
+void testRestoreDerivesAllocator() {
+    // nextEntityId = max(restored ids) + 1, for ANY input order.
+    noto3d::scene::Entity a; a.id = 4;
+    noto3d::scene::Entity b; b.id = 2;
+    noto3d::scene::Entity c; c.id = 9;
+    auto restored = Scene::fromEntities({a, b, c});
+    check(restored.createEntity("next", "warm") == 10,
+          "derived allocator = max(restored ids) + 1 = 10");
+
+    // An empty set leaves the first id at 1.
+    auto empty = Scene::fromEntities({});
+    check(empty.entities().empty(), "restore: empty set stays empty");
+    check(empty.createEntity("first", "smile") == 1,
+          "derived allocator for an empty set = 1");
+
+    // Single entity, and a set whose max id is the FIRST element.
+    noto3d::scene::Entity only; only.id = 5;
+    check(Scene::fromEntities({only}).createEntity("x", "y") == 6,
+          "derived allocator for a single entity = id + 1");
+    noto3d::scene::Entity lo; lo.id = 1;
+    noto3d::scene::Entity hi; hi.id = 30;
+    check(Scene::fromEntities({hi, lo}).createEntity("x", "y") == 31,
+          "derived allocator is the max, not the last element");
+}
+
+void testRestoreQ1ReusesDestroyedId() {
+    // ADR-0013 Q1, pinned: a restore starts a NEW Scene lifetime, so the
+    // allocator is derived from the surviving set and a previously destroyed
+    // high-water id MAY reappear.  This is a decision, not drift: if this
+    // assertion ever changes, ADR-0013 Q1 must be amended, not the test.
+    Scene live;
+    live.createEntity("a", "smile");   // id 1
+    live.createEntity("b", "crown");   // id 2
+    live.createEntity("c", "sun");     // id 3
+    const auto preDestroyMax = 3u;
+    check(live.destroyEntity(preDestroyMax), "Q1: the highest id is destroyed");
+
+    std::vector<noto3d::scene::Entity> survivors(live.entities().begin(),
+                                                live.entities().end());
+    auto restored = Scene::fromEntities(std::move(survivors));
+
+    check(restored.entities().size() == 2, "Q1: only the survivors were restored");
+    // survivors are {1, 2}, so max(restored) + 1 == 3 — which IS the id that was
+    // just destroyed.  That reuse is the accepted consequence of *deriving* the
+    // counter from the entity set (ADR-0013 Q1): the file stays a pure function
+    // of the ids it contains, and a new Scene lifetime begins at the load.
+    const auto reused = restored.createEntity("d", "moon");
+    check(reused == preDestroyMax,
+          "Q1: the derived allocator reuses the destroyed high-water id (3)");
+    check(reused == 3 && restored.findEntity(3) != nullptr,
+          "Q1: the reused id resolves in the restored scene");
+    check(restored.createEntity("e", "moon") == 4,
+          "Q1: the allocator keeps advancing monotonically from there");
+}
+
 }  // namespace
 
 int main() {
@@ -158,6 +265,9 @@ int main() {
     testIdentityAndStorage();
     testClearAndCounter();
     testEntityDefaults();
+    testRestorePreservesEverything();
+    testRestoreDerivesAllocator();
+    testRestoreQ1ReusesDestroyedId();
     testModelMatrix();
 
     if (g_failures == 0) {

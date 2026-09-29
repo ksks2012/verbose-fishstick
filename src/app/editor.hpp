@@ -72,6 +72,19 @@ public:
     // mutations (spans from entities() are invalidated by structural mutations).
     [[nodiscard]] const scene::Scene& scene() const noexcept;
 
+    // === Scene replacement (M6 load injection, ADR-0013 Q6) ==================
+    // The ONE and only route by which a loaded Scene reaches the editor.
+    // Takes the Scene BY VALUE and moves it in, so the whole lifetime — the
+    // entity set and the derived allocator together — crosses the boundary
+    // atomically; there is no window in which the scene and its allocator
+    // disagree.  It hands nothing out: no Scene&, no Entity*, no span, so the
+    // M5 type boundary is unchanged.
+    //
+    // Selection is editor-session state and is NOT persisted (ADR-0013 Q2), so
+    // it is cleared — otherwise a selection could name an id that the new scene
+    // does not contain.
+    void replaceScene(scene::Scene scene) noexcept;
+
 private:
     scene::Scene    scene_;
     scene::EntityId selection_{scene::InvalidEntityId};

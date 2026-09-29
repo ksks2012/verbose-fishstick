@@ -154,4 +154,16 @@ const scene::Scene& Editor::scene() const noexcept {
     return scene_;
 }
 
+// ---------------------------------------------------------------------------
+// Scene replacement (M6 load injection)
+// ---------------------------------------------------------------------------
+
+void Editor::replaceScene(scene::Scene scene) noexcept {
+    scene_ = std::move(scene);
+    // Selection is session state, never persisted (ADR-0013 Q2).  Clear it via
+    // the existing deselect() so there is exactly one place that writes
+    // selection_ to InvalidEntityId for "nothing is selected".
+    deselect();
+}
+
 }  // namespace noto3d::app

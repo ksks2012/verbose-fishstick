@@ -26,6 +26,14 @@
 // M6 forward contract (Q4): a Scene JSON file is a complete snapshot; loading
 // replaces the whole Scene including the id allocation state, then sets
 // nextEntityId = max(restored ids) + 1.
+//
+// M6 restore entry (ADR-0013 Q1, ticket 0042): fromEntities() is the ONLY way
+// to build a Scene that carries pre-existing ids.  It exists because
+// nextEntityId_ is private with no setter, so before this there was no way to
+// inject a restored scene at all.  The allocator is *derived* from the incoming
+// ids rather than accepted as an argument, which is what makes "the counter is a
+// pure function of the entity set" a type-level property: there is no overload
+// to pass an arbitrary value to.
 namespace noto3d::scene {
 
 using EntityId = std::uint32_t;
@@ -54,6 +62,22 @@ class Scene {
 public:
     // Monotonic id starting at 1; never reused (clear() included).
     EntityId createEntity(std::string name, std::string assetId);
+
+    // M6 restore entry (ADR-0013 Q1).  Builds a Scene from entities that
+    // already carry their own ids, preserving the given order (which becomes
+    // creation order), and DERIVES the allocator as max(ids) + 1 — or 1 for an
+    // empty set.  There is deliberately no setter, no (entities, nextId)
+    // overload, and no in-place variant: the counter can only ever arrive as a
+    // consequence of the entity set.
+    //
+    // PRECONDITION (not validation): every id is non-zero and ids are unique.
+    // A violation is a programming error, checked by a debug-only assert and
+    // undefined in release — it is NOT a diagnostic path.  Structural
+    // validation of an untrusted *document* (non-v1, bad shape, id == 0,
+    // duplicate id) is the serializer's job: ADR-0013 Q3, ticket 0044.  Keeping
+    // that in one place is deliberate; a graceful return here would create a
+    // second, half-validating half of the same rule.
+    static Scene fromEntities(std::vector<Entity> entities);
 
     // Erase-preserving-creation-order; returns false (no-op) for unknown ids.
     bool destroyEntity(EntityId id) noexcept;
