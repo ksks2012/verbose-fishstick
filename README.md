@@ -11,9 +11,10 @@ transform, swap asset, create, delete — with end-to-end structured observabili
   glad + stb_image (committed under `lib/`)
 - **Docs hierarchy:** `docs/CONTEXT.md` = current implementation truth; `docs/adr/` = decision
   history (+ embedded milestone specs); `docs/DEFINITION.md` = project vocabulary;
-  `docs/CHANGELOG.md` = milestone history; `docs/archive/ticket/` = all execution tickets
-  (complete, incl. M5 0028–0034); `docs/ticket/` = pending (0026 M5-adjacent camera interaction;
-  0027 M6-preceding gate; 0035 header conformance).
+  `docs/CHANGELOG.md` = milestone history;   `docs/archive/ticket/` = all execution tickets
+  (complete, incl. M5 0028–0034 and the 0027 asset-boundary spike); `docs/ticket/` = pending
+  (0026 M5-adjacent camera interaction; 0035 header conformance; 0036–0039 the ADR-0012
+  `noto3d_asset_cpu` split).
 
 ## Status
 
@@ -47,10 +48,10 @@ close is delivered by **`scripts/m5-close-matrix.sh`** (CLI exit-code + structur
 every entry mode, M5-op log assertions via the headless app suites, static seam checks) with
 **ctest 21/21 dev + release** and `xprop` titles re-verified unchanged from M4. The four manual
 docking/edit-smoke boxes of the close remain an open follow-up (require a real window session).
-**0026** (M5 camera interaction semantics & cursor baseline, M5-adjacent, waiting on 0028),
-**0027** (M6-preceding asset CPU/GPU boundary gate) and **0035** (header-conformance, code-quality)
-are the pending side-tickets, living under `docs/ticket/`. All completed execution history lives
-under `docs/archive/ticket/`. Current milestone: **M5 ImGui Editor complete — M6 Save/Load is
+**0026** (M5 camera interaction semantics & cursor baseline, M5-adjacent, waiting on 0028) and
+**0035** (header-conformance, code-quality) are the pending side-tickets; the **0027** asset CPU/GPU
+boundary spike is **complete (ADR-0012)** with its implementation chain **0036–0039** pending. All
+completed execution history lives under `docs/archive/ticket/`. Current milestone: **M5 ImGui Editor complete — M6 Save/Load is
 next**.
 
 ## Build & test
@@ -121,10 +122,12 @@ texture ref promotes the asset to `LOADED_WITH_WARNINGS` (geometry still renders
    (docking move/resize with correct non-square viewport aspect, the full user edit pass,
    interaction-ownership checks, no-gizmo/no-undo confirmation). Everything else about M5 is
    machine-closed; these need a real windowed session.
-2. **Pending ticket work**: **0035** (declaration-only header conformance: 10 remaining inline
+2. **Pending ticket work**: **0036–0039** (the ADR-0012 `noto3d_asset_cpu` split — extract a
+   GL-free `renderer/vertex.hpp`, create the `noto3d_asset_cpu` target, point `tests/asset` +
+   `--list-assets` at it so they link no GL, then close out; code-quality, **does not block M6**),
+   **0035** (declaration-only header conformance: 10 remaining inline
    definitions in `renderer`/`ui` headers — code-quality, off-chain), **0026** (M5 camera
-   interaction semantics & cursor baseline; M5-adjacent, now waiting only on 0028),
-   **0027** (asset CPU/GPU boundary gate — **before M6**; premise corrected — the boundary already
-   exists, what remains is header/type coupling).
+   interaction semantics & cursor baseline; M5-adjacent, now waiting only on 0028).
 3. **M6 Save/Load** — Scene JSON as a complete snapshot (forward contract in ADR-0010 Q4), with the
-   previous milestone's decisions carried forward.
+   previous milestone's decisions carried forward. The 0027 asset-boundary gate is **closed**
+   (ADR-0012), so the ownership model this milestone depends on is determined.

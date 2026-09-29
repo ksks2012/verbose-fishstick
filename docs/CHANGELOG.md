@@ -2,6 +2,36 @@
 
 ## [Unreleased] — M5 ImGui Editor (complete; 0028–0034 archived; four manual smoke items open in 0033)
 
+### Architecture — asset CPU/GPU boundary (0027 spike → ADR-0012)
+- **0027 — asset CPU/GPU boundary architecture spike. Closed.** The M6 gate is resolved: the spike
+  confirmed the premise correction — **the runtime CPU/GPU boundary already existed and was already
+  enforced** (`src/asset/` makes no direct GL call; `loadObjShapes`/`CanonicalShape`/
+  `loadModelShapesOnly`/`loadManifestOnly` are CPU-only; `uploadToGpu()` is the single upload gate).
+  What remained was header/type + **link** coupling, now decided in **ADR-0012** (no prior ADR
+  amended; additive):
+  - **① Type ownership** — `Vertex` (32 B) and `Material` are the interchange format, not GPU
+    resources: `Vertex` moves to a new GL-free `renderer/vertex.hpp`, `Material` stays GL-free, same
+    namespace / no rename. `Mesh`/`SubMesh`/`Model`/`Texture` stay GPU-owned (`Model` not moved).
+    The CPU record's `Material::texture` is always `nullopt`; `uploadToGpu()` is its only writer.
+  - **①b Lifetime** — unchanged and now explicit: `AssetRegistry` remains the **sole authority and
+    sole owner** of both the CPU and GPU caches (a facade over two libraries, not two authorities —
+    ADR-0007 verbatim); `DrawItem::model` stays the borrowed frame-local `const renderer::Model*`
+    (ADR-0010 Q5), invalidated by `reload()`; the 0012 GL-owning-lifetime rule untouched.
+  - **② Library shape** — a real split: new **`noto3d_asset_cpu`** (json + tinyobjloader only; no
+    renderer/glad/libGL) holds the parse/dedup/manifest core; `noto3d_asset` (unchanged name +
+    public contract) depends on it and keeps `uploadToGpu()`, the GPU caches, and all six
+    `AssetRegistry` entry points.
+  - **③ Consequences** — `loadManifestOnly()`/`loadModelShapesOnly()` kept as thin CPU-only paths
+    (0025③); escape hatches + the 0013 path predicate unchanged; **`tests/asset` + `--list-assets`
+    stop linking GL** — the concrete win the spike was opened to price. Rejected (with reasons in
+    the ADR): single-lib GL-free header subset (kept as tracer 1), keep-as-is, renderer-side upload
+    (inverts M4), split CPU/GPU `Material`, asset-owned `Vertex`/`Material` copies.
+- **Execution** — four CPU-first tracer tickets, each independently green and behaviour-neutral:
+  **0036** extract `renderer/vertex.hpp` · **0037** create `noto3d_asset_cpu` · **0038** retarget
+  `tests/asset` + `--list-assets`, prove the GL-free link · **0039** close-out (graph record + full
+  regression + docs). These are code-quality and do **not** block M6 scope. **This spike wrote no
+  production code**; 0025 stays verification-only for ③/⑤.
+
 ### M5 — close (0033)
 - **0033 — M5 integration/regression matrix + manual docking smoke.** Closed the M5 editing surface
   as a whole, mirroring 0024's role for M4 (ADR-0010 Q8 / ADR-0011 Q8 shape): no readback,

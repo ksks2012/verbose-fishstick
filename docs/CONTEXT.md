@@ -18,11 +18,13 @@ execution tickets 0028–0034)** — implemented and machine-verified, **M5 clos
 matrix (scripts/m5-close-matrix.sh, dev + release) + xprop title evidence**; the four manual
 docking/edit-smoke items in ticket 0033 are recorded as an **open follow-up** requiring a real
 window session (there is no such user session in this environment — ticket 0033 stays
-in-progress on those four boxes only). M0
+in-progress on those four boxes only). **The 0027 asset CPU/GPU architecture gate is closed
+(ADR-0012; execution 0036–0039, non-blocking for M6)**, so M6 Save/Load may proceed on a
+determined ownership model. M0
 (Environment/build),
 M0.5 (Asset contract spike), M1 (minimal renderer + pass hygiene), M2 (0008 → 0014 → 0009 → 0013 +
 0012/0011/0010) and M3 (0015 → 0016 → 0017 → 0018) are done and verified. Completed tickets are
-archived at `docs/archive/ticket/` (all 31). Working tree state:
+archived at `docs/archive/ticket/` (all 32). Working tree state:
 
 - `noto3d-editor` consumes the AssetRegistry: `--asset=<id>` (default first renderable manifest
   asset) and `--demo` (0014 fixture) render through the registry; 0009's E2E gate is closed
@@ -62,10 +64,12 @@ items remain an open follow-up (real window session required). ADR-0008, ADR-001
 (no deviation found; the Q5 `noto3d_ui` separate-library point is carried from 0028).
 Per DOCUMENTATION-LIFECYCLE, specs live at
 the ADR layer: the M3 spec is embedded in **ADR-0009**, the M4 spec in **ADR-0010**, the M5 spec
-in **ADR-0011**; `docs/ticket/` holds execution tickets (0026 is M5-adjacent, still open, waiting
-only on 0028; 0027 is an M6-preceding gate; 0035 is code-quality and does not block M6; 0033 is
-in-progress on its four manual-smoke boxes), plus
-0020–0025 and 0028–0034 archived under accepted ADRs.
+in **ADR-0011**; the asset CPU/GPU boundary decision is in **ADR-0012** (its execution tickets are
+0036–0039). `docs/ticket/` holds execution tickets (0026 is M5-adjacent, still open, waiting
+only on 0028; 0035 is code-quality and does not block M6; 0033 is
+in-progress on its four manual-smoke boxes; 0027 is **complete and archived — decided in ADR-0012**,
+its implementation 0036–0039 is open and does not block M6), plus
+0020–0025, 0027 (the ADR-0012 spike record) and 0028–0034 archived under accepted ADRs.
 M0 scope, user stories and acceptance matrix: `docs/archive/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
 Project overview / build / test quickstart: repo-root `README.md`.
@@ -176,6 +180,28 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   M5 adds no GPU-resource ownership — asset editing mutates `assetId` only), M6 save/load, multi-view
   layouts, scene graph/prefab/ECS. Verification = headless `tests/app/` suites for the semantics +
   automated log/exit-code assertions + manual docking/smoke evidence.
+- ADR-0012: **Asset CPU/GPU boundary** (ticket 0027 spike, closed 2026-09-29; execution tickets
+    0036–0039, none blocking M6). Premise correction holds: the **runtime boundary already existed**
+    and is enforced — `src/asset/` makes no direct GL call, `loadObjShapes`/`CanonicalShape`/
+    `loadModelShapesOnly`/`loadManifestOnly` are CPU-only, `uploadToGpu()` is the single upload
+    gate. What was fixed here is **header/type + link coupling**. ① **Type ownership:** `Vertex`
+    (32 B, ADR-0006) and `Material` are the *interchange format*, not GPU resources — `Vertex`
+    moves to a new GL-free `renderer/vertex.hpp` and `Material` stays GL-free; same namespace, no
+    rename/alias. `Mesh`/`SubMesh`/`Model`/`Texture` stay GPU-owned; `Model` is not moved. The CPU
+    record's `Material::texture` is **always `nullopt`** (`uploadToGpu()` is its only writer).
+    ①b **Lifetime unchanged and now explicit:** `AssetRegistry` stays the **sole authority and sole
+    owner** of both the CPU and GPU caches (a facade over two libraries, not two authorities —
+    ADR-0007 verbatim); `DrawItem::model` stays the borrowed frame-local `const renderer::Model*`
+    (ADR-0010 Q5), invalidated by `reload()`; the 0012 GL-owning-lifetime rule is untouched.
+    ② **Real split:** new `noto3d_asset_cpu` (json+tinyobjloader only; no renderer/glad/libGL) holds
+    the parse/dedup/manifest core; `noto3d_asset` (unchanged name + public contract) depends on it
+    and keeps `uploadToGpu()`, the GPU caches and all six `AssetRegistry` entry points.
+    ③ `loadManifestOnly()`/`loadModelShapesOnly()` are **kept** (0025③) as thin CPU-only paths;
+    escape hatches + the 0013 path predicate unchanged; **`tests/asset` + `--list-assets` stop
+    linking GL** (the concrete win). Rejected: single-lib GL-free header subset (kept as tracer 1),
+    keep-as-is, renderer-side upload (inverts M4), split CPU/GPU `Material` (duplicates ADR-0006),
+    asset-owned `Vertex`/`Material` copies (32 B layout drift). **Supersedes no prior ADR** — 0006,
+    0007, 0008, 0009, 0010, 0011 all stand; this is additive.
 
 ## Key external facts (Sep 2026)
 - googlefonts/noto-emoji: zero mesh files on any branch; `3D/` = fonts (TTF) + png (≤512px);
@@ -278,13 +304,20 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   the app/editor input layer — **not** `renderer::Camera` (ADR-0010 Q7 purity preserved) — and
   cursor-baseline re-establishment (widget-drag end, focus regain, camera drag start/end; deltas
   denied by the gate are discarded, not deferred)
-- 0027 (asset CPU/GPU boundary architecture spike) — **M6-preceding gate** (ADR-0011 Q1), not an
-  M5 prerequisite; premise corrected: a CPU/GPU boundary **already exists** (no direct GL calls in
-  `src/asset/`; `loadObjShapes`/`CanonicalShape`/`loadModelShapesOnly` CPU-only; `uploadToGpu()`
-  is the single upload gate) and what remains is header/type coupling (`AssetRegistry` public API
-  exposes `renderer::Model*` + caches a `Texture`). M5 adds no GPU-resource ownership; asset
-  editing mutates `assetId` only. Must preserve the M4 contracts (AssetRegistry authority, Scene
-  pure data, app-layer `collectDrawItems` seam, borrowed `DrawItem::model`)
+- 0027 (asset CPU/GPU boundary architecture spike) — **complete (2026-09-29)**, decided in
+  **ADR-0012**; execution split into **0036–0039** (CPU-first, none blocking M6). Premise
+  corrected: a CPU/GPU boundary **already exists** (no direct GL calls in `src/asset/`;
+  `loadObjShapes`/`CanonicalShape`/`loadModelShapesOnly`/`loadManifestOnly` CPU-only;
+  `uploadToGpu()` is the single upload gate) and what was addressed is header/type + link coupling
+  (`AssetRegistry` public API exposes `renderer::Model*` + caches a `Texture`; `noto3d_asset`
+  PUBLIC-links `noto3d_renderer` → glad, so CPU-only tests/`--list-assets` transitively linked GL).
+  M5 added no GPU-resource ownership; asset editing mutates `assetId` only. Preserved M4 contracts
+  (AssetRegistry sole authority, Scene pure data, app-layer `collectDrawItems` seam, borrowed
+  `DrawItem::model`) all hold. **Gate closed — M6 may proceed.**
+- 0036–0039 (ADR-0012 execution, CPU-first tracer chain) — `docs/ticket/`: 0036 extract
+  `renderer/vertex.hpp` (GL-free `Vertex`) · 0037 create `noto3d_asset_cpu` ·
+  0038 retarget `tests/asset` + `--list-assets`, prove GL-free link · 0039 close-out (graph record
+  + full regression + docs). Code-quality; **does not block M6**.
 - 0035 (declaration-only header conformance) — code-quality, independent of the M5 chain; does
   **not** block M5 close or M6. Ten remaining inline definitions (8 implicit-inline accessors in
   `renderer`/`ui` headers + 2 free `inline` conversions added by 0030's `transform_edit.hpp`; 2 of

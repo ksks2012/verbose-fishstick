@@ -1,10 +1,10 @@
 # 0027 — Asset CPU/GPU boundary architecture spike
 
 **Source:** code review of 0021–0024 (items 003/005), split out of 0025 in the Sep 2026 re-review.
-**Status:** **M6-preceding architecture gate** (re-scoped 2026-09-28 by ADR-0011 Q1) — not M5
-prerequisite, not in the M5 critical path
-**Blocked by:** none to *explore*; must be closed **before M6 scope opens** (M6's snapshot
-persistence work must not proceed on an undetermined ownership model)
+**Status:** **complete** — spike closed 2026-09-29 in **ADR-0012**; execution split into
+**0036–0039** (CPU-first tracer bullets)
+**Blocked by:** none — the ownership model is now determined, so M6's snapshot persistence may
+proceed; the *implementation* (0036–0039) is code-quality work that does not block M6 scope
 
 **Premise correction (ADR-0011 Q1, 2026-09-28).** This ticket was written on the premise that
 "AssetRegistry's CPU-side manifest/OBJ parsing is fused to a GL upload path". The 2026-09-28
@@ -102,11 +102,68 @@ transitive link; a `renderer`-side upload entry point instead of an asset-side o
 
 ## Acceptance
 
-- [ ] Spike written up as an ADR (or ADR amendment) with the type-ownership decision and the chosen
+- [x] Spike written up as an ADR (or ADR amendment) with the type-ownership decision and the chosen
       library shape, including a rejected-alternatives section
-- [ ] Execution split into small implementation tickets (tracer-bullet: CPU-only manifest parse
+- [x] Execution split into small implementation tickets (tracer-bullet: CPU-only manifest parse
       behind a stable entry point first)
-- [ ] No M4 code changes made under this ticket; 0025 stays verification-only for ③/⑤
+- [x] No M4 code changes made under this ticket; 0025 stays verification-only for ③/⑤
 
 **Points to ADR:** 0007 (AssetRegistry authority, standalone load escape hatches) · 0008 (module
 boundaries) · 0009 (0017 pre-GL diagnostic CLI)
+
+---
+
+## Outcome — decided in ADR-0012 (2026-09-29)
+
+This ticket is an **architecture spike**: it decides the ownership model and closes the M6 gate,
+but writes no production code. The decision and its reasoning live in
+**`docs/adr/0012-asset-cpu-gpu-boundary.md`**; this section records what the spike concluded and
+where the work went.
+
+**Findings (from reading the code, not from the original premise).** The runtime CPU/GPU boundary
+was **already there** and enforced — `src/asset/` makes no direct GL call, `loadObjShapes()` /
+`CanonicalShape` / `loadModelShapesOnly()` / `loadManifestOnly()` are CPU-only, and
+`uploadToGpu()` is already the single upload gate. What remained was three kinds of coupling:
+`obj_loader.hpp` (CPU) reached `glad/gl.h` **only** via `#include <mesh.hpp>` to name
+`renderer::Vertex`; `AssetRegistry`'s single public header exposes GPU types (`Model*`,
+`shared_ptr<Texture>`) answering both the CPU and the GPU question; and `noto3d_asset` links
+`noto3d_renderer` **PUBLIC**, so every consumer — including the CPU-only asset tests and the
+`--list-assets` path — transitively linked GL. All `tests/asset` cases already run CPU-only
+(`model()==nullptr` / `externalModel()==nullptr`), so that link was pure waste.
+
+**Decisions (ADR-0012).**
+
+- **① Type ownership** — `Vertex` and `Material` are the *interchange format*, not GPU resources:
+  `Vertex` moves to a new GL-free `renderer/vertex.hpp`, `Material` stays GL-free. Same namespace,
+  no rename, no alias. `Mesh` / `SubMesh` / `Model` / `Texture` stay GPU-owned; `Model` is not
+  moved. The CPU record carries a `Material` whose `texture` is **always `nullopt`** — the
+  invariant is stronger than "usually null", and `uploadToGpu()` is its only writer.
+- **①b Lifetime** — unchanged and now explicit: `AssetRegistry` remains the **sole authority and
+  sole owner** of both the CPU dedup cache and the GPU caches (a facade over two libraries, not two
+  authorities); `Model*` through the resolver stays the ADR-0010 Q5 **borrowed frame-local**
+  pointer, invalidated by `reload()`; the 0012 GL-owning-lifetime discipline is untouched — the
+  split relocates no GL owner.
+- **② Library shape** — a **real split**: new `noto3d_asset_cpu` (json + tinyobjloader only; no
+  renderer, no glad, no libGL) holding the parse/dedup/manifest core, and `noto3d_asset` (unchanged
+  name and public contract) depending on it, still owning `uploadToGpu()`, the GPU caches, and all
+  six `AssetRegistry` entry points.
+- **③ Consequences** — `AssetRegistry` becomes a facade; `loadManifestOnly()` /
+  `loadModelShapesOnly()` are **kept** (0025③ locked them as public production API) as thin
+  CPU-only paths; the escape hatches keep their behaviour and the 0013 path predicate; and
+  `tests/asset` + `--list-assets` **stop linking GL** — the concrete win the spike was opened to
+  price.
+
+**Rejected** (recorded with reasons in the ADR): single library with a GL-free header subset (kept
+as tracer 1, 0036 — it cannot stop the *link* to GL); keep-as-is; a renderer-side upload entry
+point (inverts the M4 contract); splitting the CPU/GPU `Material` (duplicates the ADR-0006 field
+contract; one type, conversion owned by `uploadToGpu()`); asset-owned copies of `Vertex`/`Material`
+(duplicates the 32 B layout, risks drift).
+
+**Execution** — four CPU-first tracer tickets, each independently green, no observable behaviour
+change: **0036** extract `renderer/vertex.hpp` · **0037** create `noto3d_asset_cpu` ·
+**0038** retarget `tests/asset` + `--list-assets` and prove the GL-free link ·
+**0039** close-out: final graph recorded + full regression re-run + CONTEXT/CHANGELOG update.
+
+**Gate status.** 0027 is **closed**. M6's snapshot-persistence work may proceed: the ownership
+model it depended on is now determined by ADR-0012. The 0036–0039 implementation is code-quality
+work and does **not** block M6 scope.
