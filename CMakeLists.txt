@@ -185,16 +185,186 @@ noto3d_apply_sanitizers(noto3d-core-tests)
 add_test(NAME core-gl-capability COMMAND noto3d-core-tests)
 
 # ---------------------------------------------------------------------------
-# Asset library (ADR-0007)
+# Asset library (ADR-0007, CPU/GPU split per ADR-0012 ②)
 # ---------------------------------------------------------------------------
-add_library(noto3d_asset STATIC
-    src/asset/asset_registry.cpp
+# noto3d_asset_cpu — the GL-free half: manifest parsing, the ADR-0007 path
+# predicate, CPU diagnostics, canonical-path dedup and RegistryResult aggregation.
+#
+# The GL boundary is enforceable by construction, not by convention:
+#   1. It links spdlog::spdlog directly instead of noto3d_core, so glad's include
+#      dir (exported PUBLIC by noto3d_core) is absent from its include path.
+#   2. It names only the two GL-free interchange headers under src/renderer/
+#      (Vertex, Material — ADR-0012 ①).  Every GPU-owning header there includes
+#      glad/gl.h, which cannot resolve here.
+#   3. It links glm::glm, so the 32 B Vertex/Material interchange structs are
+#      checked against the PINNED lib/glm, not a system glm (ADR-0003/0010).
+# The two configure-time guards below enforce all three.  Both derive their
+# inputs from this target's own CMake properties, so neither can drift out of
+# sync with the build they are meant to police.
+add_library(noto3d_asset_cpu STATIC
+    src/asset/asset_cpu.cpp
     src/asset/obj_loader.cpp)
+target_include_directories(noto3d_asset_cpu
+    PUBLIC  ${CMAKE_SOURCE_DIR}/src/asset
+            ${CMAKE_SOURCE_DIR}/src/renderer
+    PRIVATE ${CMAKE_SOURCE_DIR}/src/core)
+target_link_libraries(noto3d_asset_cpu
+    PUBLIC  nlohmann_json::nlohmann_json glm::glm
+    PRIVATE tinyobjloader spdlog::spdlog)
+noto3d_set_warnings(noto3d_asset_cpu)
+noto3d_apply_sanitizers(noto3d_asset_cpu)
+
+# Architecture guard — enforced at configure time (ADR-0012 ②).
+# Guard 1 (link): the CPU core must link no renderer and no GL library.
+# noto3d_core is forbidden for a specific reason, not by reflex: it PUBLIC-exports
+# lib/glad/include, which is exactly the leak this split removes.
+set(_noto3d_cpu_forbidden_libs
+    noto3d_renderer noto3d_scene noto3d_ui noto3d_core
+    glad glad2 OpenGL::GL imgui glfw GLFW)
+get_target_property(_noto3d_cpu_link_libs noto3d_asset_cpu LINK_LIBRARIES)
+foreach(_lib IN LISTS _noto3d_cpu_forbidden_libs)
+    if("${_lib}" IN_LIST _noto3d_cpu_link_libs)
+        message(FATAL_ERROR
+            "[arch-guard] noto3d_asset_cpu links '${_lib}' — the asset CPU core must "
+            "stay renderer-free and GL-free (ADR-0012 ②).  Keep the dependency in "
+            "noto3d_asset (the GPU facade) instead.")
+    endif()
+endforeach()
+unset(_noto3d_cpu_link_libs)
+unset(_noto3d_cpu_forbidden_libs)
+unset(_lib)
+
+# Architecture guard — enforced at configure time (ADR-0012 ①/②).
+# Guard 2 (includes): no CPU translation unit may reach a GL header, or any
+# GPU-owning project header, directly or transitively.
+#
+# The probe takes its include dirs from the target's own INCLUDE_DIRECTORIES plus
+# the INTERFACE_INCLUDE_DIRECTORIES of everything it links, so it always sees what
+# the real build sees.  Deriving them by hand instead is what hid a live bug: the
+# CPU target was resolving the SYSTEM glm 0.9.9 instead of the pinned lib/glm
+# 1.0.1, so an ODR split across the boundary went unnoticed.
+#
+# glad/imgui/glfw are added on top, purely so a violation resolves and can be
+# *named* rather than dying as a confusing "file not found".  A superset can only
+# widen a closure, never narrow it, so this cannot mask a violation.
+get_target_property(_cpu_own_dirs noto3d_asset_cpu INCLUDE_DIRECTORIES)
+get_target_property(_noto3d_cpu_deps noto3d_asset_cpu LINK_LIBRARIES)
+set(_cpu_probe_dirs ${_cpu_own_dirs})
+foreach(_dep IN LISTS _noto3d_cpu_deps)
+    if(TARGET ${_dep})
+        get_target_property(_dep_dirs ${_dep} INTERFACE_INCLUDE_DIRECTORIES)
+        if(_dep_dirs)
+            # FetchContent deps expose their build-tree path as
+            # $<BUILD_INTERFACE:...>; install-interface entries are irrelevant to a
+            # configure-time probe, so they are dropped.
+            string(REGEX MATCHALL "\\$<BUILD_INTERFACE:[^>]+>" _bi "${_dep_dirs}")
+            foreach(_e IN LISTS _bi)
+                string(REGEX REPLACE "\\$<BUILD_INTERFACE:([^>]+)>" "\\1" _p "${_e}")
+                list(APPEND _cpu_probe_dirs "${_p}")
+            endforeach()
+            string(REGEX REPLACE "\\$<[^>]+>" ";" _dep_dirs "${_dep_dirs}")
+            foreach(_e IN LISTS _dep_dirs)
+                if(_e AND NOT "${_e}" MATCHES "^\\$<")
+                    list(APPEND _cpu_probe_dirs "${_e}")
+                endif()
+            endforeach()
+        endif()
+    endif()
+endforeach()
+list(APPEND _cpu_probe_dirs
+    ${LIB_DIR}/glad/include ${IMGUI_DIR} ${IMGUI_DIR}/backends ${GLFW_DIR}/include)
+list(REMOVE_DUPLICATES _cpu_probe_dirs)
+# Prefix with -I so the compiler treats them as search paths, not input files.
+foreach(_d IN LISTS _cpu_probe_dirs)
+    list(APPEND _cpu_probe_args "-I${_d}")
+endforeach()
+
+# src/renderer/ is on the CPU include path for the two GL-free interchange
+# headers (ADR-0012 ①).  This is an ALLOWLIST, not a denylist of GPU headers: a
+# newly added src/renderer/*.hpp fails the build until someone consciously
+# classifies it, which is the review gate we want.  A denylist would let a new
+# GPU-owning header through unnoticed.
+set(_noto3d_cpu_renderer_allowlist vertex.hpp material.hpp)
+# GL and windowing headers have no allowlist entry — they are never permitted.
+# These are matched as path SUBSTRINGS, not basenames: the basename of
+# glad/gl.h is gl.h, and a basename comparison silently misses it.
+set(_noto3d_cpu_forbidden_headers
+    glad/gl.h GL/gl.h GL/glew.h GL/glcore.h GLFW/glfw3.h imgui.h)
+
+get_target_property(_noto3d_cpu_sources noto3d_asset_cpu SOURCES)
+foreach(_src IN LISTS _noto3d_cpu_sources)
+    if(NOT IS_ABSOLUTE "${_src}")
+        set(_src "${CMAKE_CURRENT_SOURCE_DIR}/${_src}")
+    endif()
+    execute_process(
+        COMMAND ${CMAKE_CXX_COMPILER} -std=c++20 -M -x c++ ${_cpu_probe_args} ${_src}
+        OUTPUT_VARIABLE _closure
+        RESULT_VARIABLE _rc
+        ERROR_VARIABLE _probe_err)
+    if(NOT _rc EQUAL 0)
+        message(FATAL_ERROR
+            "[arch-guard] could not compute the include closure of ${_src} "
+            "(compiler exited ${_rc}):\n${_probe_err}")
+    endif()
+    # GL / windowing: substring match on the whole closure.
+    foreach(_forbidden IN LISTS _noto3d_cpu_forbidden_headers)
+        string(FIND "${_closure}" "${_forbidden}" _hit)
+        if(NOT _hit EQUAL -1)
+            message(FATAL_ERROR
+                "[arch-guard] ${_src} reaches the GL/windowing header '${_forbidden}' — "
+                "the asset CPU core must resolve no GL and no windowing (ADR-0012 ②).")
+        endif()
+    endforeach()
+    # src/renderer/: per-file basename against the interchange allowlist.
+    string(REGEX MATCHALL "[^ \n]+" _closure_files "${_closure}")
+    foreach(_f IN LISTS _closure_files)
+        if("${_f}" MATCHES "/src/renderer/")
+            get_filename_component(_fname "${_f}" NAME)
+            if(NOT "${_fname}" IN_LIST _noto3d_cpu_renderer_allowlist)
+                message(FATAL_ERROR
+                    "[arch-guard] ${_src} reaches '${_fname}' under src/renderer/ — the "
+                    "only permitted headers there are the GL-free interchange structs "
+                    "vertex.hpp and material.hpp (ADR-0012 ①).  A GPU-owning header must "
+                    "not be reachable from the asset CPU core.")
+            endif()
+        endif()
+    endforeach()
+endforeach()
+unset(_noto3d_cpu_sources)
+unset(_noto3d_cpu_renderer_allowlist)
+unset(_noto3d_cpu_forbidden_headers)
+unset(_cpu_own_dirs)
+unset(_cpu_probe_dirs)
+unset(_cpu_probe_args)
+unset(_src)
+unset(_f)
+unset(_fname)
+unset(_forbidden)
+unset(_hit)
+unset(_closure)
+unset(_closure_files)
+unset(_rc)
+unset(_probe_err)
+unset(_d)
+unset(_bi)
+unset(_p)
+unset(_e)
+unset(_dep)
+unset(_dep_dirs)
+unset(_noto3d_cpu_deps)
+
+# noto3d_asset — the GPU facade.  Name, public API and single-authority contract
+# are unchanged (ADR-0007); it now delegates every CPU parse and every
+# RegistryResult aggregation to noto3d_asset_cpu and keeps only uploadToGpu(),
+# the GPU caches and the per-asset status bookkeeping.
+add_library(noto3d_asset STATIC
+    src/asset/asset_registry.cpp)
 target_include_directories(noto3d_asset PUBLIC
     ${CMAKE_SOURCE_DIR}/src/asset)
 target_link_libraries(noto3d_asset
-    PUBLIC  noto3d_renderer nlohmann_json::nlohmann_json
-    PRIVATE tinyobjloader)
+    PUBLIC  noto3d_asset_cpu noto3d_renderer nlohmann_json::nlohmann_json)
+target_link_libraries(noto3d_asset
+    PUBLIC  noto3d_asset_cpu noto3d_renderer nlohmann_json::nlohmann_json)
 noto3d_set_warnings(noto3d_asset)
 noto3d_apply_sanitizers(noto3d_asset)
 

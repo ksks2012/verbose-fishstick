@@ -98,6 +98,24 @@ Decision: **split `noto3d_asset` into two CMake targets** — a GL-free CPU core
   (now including the GL-free `vertex.hpp`/`material.hpp`), and the pure parse/dedup/entry logic.
   It links only `nlohmann_json` (PUBLIC) and `tinyobjloader` (PRIVATE) — **no `noto3d_renderer`,
   no `glad`, no `libGL`**. This is the target `--list-assets` and `tests/asset/` build against.
+
+  **Amendment (ticket 0037, implementation-forced).** The link set above is the *intent* — no GL,
+  no renderer — but two header-only third-party libs also have to be linked, without weakening it:
+  - **`glm::glm` (PUBLIC).** ① makes `Vertex`/`Material` the interchange format, and both are glm
+    types. The CPU parse path therefore compiles glm-using code, so it must resolve glm. Without
+    this link the CPU target silently picked up a **system glm (0.9.9) while the project pins
+    `lib/glm` 1.0.1** — an ODR split across the boundary, with the 32 B `Vertex` static_assert
+    checked against the wrong glm (ADR-0003 "external libs live in `lib/<name>`" + 0010's SHA
+    pinning bypassed). glm is pure math: no GL, no renderer.
+  - **`spdlog::spdlog` (PRIVATE).** `obj_loader.cpp` uses `NOTO3D_DEBUG` from `log.hpp`, so the log
+    facade is reachable from the CPU target. `spdlog` is linked **directly rather than via
+    `noto3d_core`** precisely to keep the boundary clean: `noto3d_core` exports `lib/glad/include`
+    PUBLIC, so linking it would put glad's headers back on the CPU target's include path. The
+    configure-time link guard therefore forbids `noto3d_core` by name.
+
+  The net link set is therefore `nlohmann_json` + `glm` (PUBLIC), `tinyobjloader` + `spdlog`
+  (PRIVATE) — still **no `noto3d_renderer`, no `noto3d_core`, no `glad`, no `libGL`**, which is the
+  property the decision actually turns on.
 - **`noto3d_asset` (GPU facade) — unchanged name, unchanged public contract.** Depends on
   `noto3d_asset_cpu` (PUBLIC) **and** `noto3d_renderer` (PUBLIC). It owns `uploadToGpu()`, the
   `AssetRegistry` class (all six existing entry points: `load` / `loadManifestOnly` / `reload` /
@@ -120,6 +138,12 @@ concrete win the spike was opened to price.
   and its own GPU upload/caches. `CpuObj`, `loadCpuRecord()`, and the CPU dedup path move to the
   CPU library; the registry keeps a `shared_ptr<const CpuObj>` handle per canonical path
   (the cache-key discipline is unchanged).
+- **`RegistryResult` aggregation moves to the CPU library** (ticket 0037). `aggregateResults()` is a
+  pure function of per-asset `LoadStatus` values and `LoadDiagnostic`s — both already CPU-side types
+  in `manifest_types.hpp` — so it is GL-free and belongs there. Only the per-asset *status
+  bookkeeping* stays in the facade, because in `Mode::Full` the status of a record depends on
+  whether its `uploadToGpu()` call succeeded. This is what lets ③'s CLI path produce a
+  `RegistryResult` without linking the GPU facade.
 - **`loadManifestOnly()` is retained as a public production API** (0025③), now backed entirely by
   `noto3d_asset_cpu`; `model()` / `externalModel()` still return `nullptr` in that mode — an
   existing, tested contract that must keep holding.

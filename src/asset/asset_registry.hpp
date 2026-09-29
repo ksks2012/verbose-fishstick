@@ -1,28 +1,19 @@
 #pragma once
 
+#include "asset_cpu.hpp"
 #include "manifest_types.hpp"
-#include "obj_loader.hpp"
 #include <model.hpp>
 #include <texture.hpp>
 
 #include <filesystem>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
 
 namespace noto3d::asset {
-
-// Shared CPU parse record for one canonical geometry path (ADR-0007 dedup).
-// Internal registry implementation detail; not part of the public entry contract.
-struct CpuObj {
-    LoadStatus                  status;
-    std::vector<CanonicalShape> shapes;
-    int                         normalWarnings = 0;
-    int                         uvWarnings     = 0;
-    std::string                 errorMessage;
-};
 
 // Read-only runtime view of assets/manifest.json (ADR-0007).
 //
@@ -107,9 +98,6 @@ private:
     std::vector<Record>         m_records;   // parallel to m_entries
     std::vector<LoadDiagnostic> m_diagnostics;
 
-    // Canonical absolute path → shared immutable CPU parse record (parse once).
-    std::unordered_map<std::string, std::shared_ptr<const CpuObj>> m_cpuCache;
-
     // Canonical absolute path → shared immutable Model (GPU dedup, Full mode only).
     std::unordered_map<std::string, std::shared_ptr<renderer::Model>> m_modelCache;
 
@@ -122,13 +110,13 @@ private:
     std::string                      m_externalCanonKey;    // GPU dedup key
     std::shared_ptr<renderer::Model> m_externalModel;
 
+    // CPU parse dedup by canonical path (ADR-0007), owned by this registry.  The
+    // parsing itself lives in noto3d_asset_cpu (ADR-0012 ②): one authority, split
+    // across two libraries — the registry still owns both caches.
+    CpuCache                         m_cpuCache;
+
     RegistryResult doLoad(const std::filesystem::path& manifestPath, Mode mode);
     RegistryResult buildResult() const;
-
-    // Parse + dedup one canonical OBJ path → shared immutable CPU record (ADR-0007).
-    std::shared_ptr<const CpuObj> loadCpuRecord(const std::filesystem::path& path,
-                                                const std::string&           label,
-                                                const std::string&           upAxis);
 };
 
 }  // namespace noto3d::asset
