@@ -1,7 +1,7 @@
 # 0041 — create `noto3d_serialization` target (GL-free boundary + proven-fires arch guard)
 
 **Source:** ADR-0013 Q11; PRD user stories 9, 10, 11 — tracer bullet 1.
-**Status:** ready-for-agent
+**Status:** complete (2026-09-30) — evidence recorded below
 **Blocked by:** — (nothing blocks this)
 **Parallel with:** 0042 — the two are independent and may run concurrently, but **completing only
 this one does not unblock 0043**: 0043 is gated on *both*, so if one of the pair slips the other's
@@ -105,3 +105,67 @@ holds.
   `noto3d_asset*` / `noto3d_renderer` / `noto3d_core` / `glad` / `libGL`.
 
 **Rolls under spec:** ADR-0013 Q11; PRD Testing Decisions ("the arch guard is itself a test").
+
+## Delivered (2026-09-30)
+
+**Target** — `noto3d_serialization` (STATIC, `src/serialization/scene_io.cpp`) at
+`CMakeLists.txt:509-523`; single-dir-per-line `target_include_directories` matching the
+`noto3d_scene` convention; `PUBLIC noto3d_scene` + `PRIVATE nlohmann_json`; wrapped in
+`noto3d_set_warnings` + `noto3d_apply_sanitizers`.
+
+**Translation unit** — `scene_io.hpp` declares `extern const int kSceneFormatVersion`;
+`scene_io.cpp` defines it (ADR-0008 declaration-only rule). `nm -C` confirms external linkage
+(`R noto3d::serialization::kSceneFormatVersion`), so a consumer of the header in 0043 will not hit
+an undefined-symbol link error.
+
+**Guard 1 (link)** — forbids `noto3d_asset`, `noto3d_asset_cpu`, `noto3d_renderer`, `noto3d_ui`,
+`noto3d_core`, `glad`, `glad2`, `OpenGL::GL`, `imgui`, `glfw`, `GLFW`; inputs are read back from
+the target's own `LINK_LIBRARIES` so the check cannot drift from the wiring.
+
+**Guard 2 (includes)** — the shared `noto3d_assert_target_reaches_no_gl()` was generalised with a
+`POLICY` keyword so one function serves both boundaries instead of growing a per-target twin:
+`interchange` (default, unchanged for `noto3d_asset_cpu` / `noto3d-registry-tests`) and `closed`
+(`src/renderer/` + `src/asset/` + `src/ui/`, nothing permitted). `noto3d_serialization` uses
+`POLICY closed`. Guard messages now cite the caller's own ADR (`ADR-0013 Q11` here) instead of
+hard-coded `ADR-0012`.
+
+### Defect found and fixed while implementing
+
+The new project-header check **did not fire on the first attempt** — the first proof run passed
+silently. Cause: `-M` echoes a relative include exactly as written, so the closure contained
+`src/serialization/../asset/manifest_types.hpp` and the `/src/asset/` prefix match never matched.
+This is the same un-normalized-path trap the existing comment records for `glad/gl.h` vs `gl.h`.
+Fixed by normalising each closure path to absolute before matching, which also closes the
+equivalent `../renderer/…` bypass on the pre-existing `interchange` policy.
+
+### Guard proofs (each aborts configure)
+
+1. `noto3d_core` added to `target_link_libraries` → `noto3d_serialization links 'noto3d_core'`
+2. `#include <glad/gl.h>` → `reaches the GL/windowing header 'glad/gl.h'`
+3. `#include "../asset/manifest_types.hpp"` → `reaches 'manifest_types.hpp' under src/asset/`
+4. `#include "../ui/dock_layout.hpp"` → `reaches 'dock_layout.hpp' under src/ui/`
+
+All four cite `(ADR-0013 Q11)`. Cases 3 and 4 are the *closed*-policy coverage that the first
+implementation lacked.
+
+A bonus fifth case fell out: `#include "../ui/editor_state.hpp"` (a header that does not exist) is
+caught by the existing "could not compute the include closure" branch, so the guard **fails closed**
+on an unresolvable include rather than passing.
+
+### Verification
+
+- Clean dev + release configure/build from scratch: **0 warnings, 0 errors** in both.
+- `ctest`: **22/22** dev, **22/22** release (unchanged, as expected — no runtime behaviour added).
+- `scripts/m5-close-matrix.sh`: **ALL PASS** in both build dirs.
+- `--graphviz`: `noto3d_serialization → noto3d_scene` and `→ nlohmann_json` rendered **dotted**
+  (PRIVATE, correctly not exported); **0** edges from any `noto3d_asset*` / `noto3d_renderer` /
+  `noto3d_core` / `glad` node into the serializer.
+- `ar t` → one member (`scene_io.cpp.o`); `nm -C` → **0** GL/glad/OpenGL symbols.
+
+**Out-of-scope respected** — no serialize/deserialize, no CLI, no reuse of `asset::RegistryResult` /
+`LoadStatus`, no existing guard allowlist widened, no `src/serialization/` header added to the CPU
+allowlist.
+
+**Not done here (by design)** — `kSceneFormatVersion` is the only symbol; the document
+vocabulary, the save/restore entry points, and the editor wiring are 0042–0044.
+

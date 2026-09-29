@@ -257,7 +257,30 @@ set(_noto3d_cpu_renderer_allowlist vertex.hpp material.hpp)
 set(_noto3d_cpu_forbidden_headers
     glad/gl.h GL/gl.h GL/glew.h GL/glcore.h GLFW/glfw3.h imgui.h)
 
+# POLICY selects how much of src/ the target may reach, so one function serves
+# both boundaries instead of each target growing a hand-written twin:
+#   interchange (default) — src/renderer/ is on the include path, but only the
+#                           GL-free interchange headers in the allowlist are legal
+#   closed                — no project header at all outside src/scene (ADR-0013
+#                           Q11: the serializer sees only scene, never the registry)
 function(noto3d_assert_target_reaches_no_gl _target _label)
+    cmake_parse_arguments(_GUARD "" "POLICY" "" ${ARGN})
+    if(NOT _GUARD_POLICY)
+        set(_GUARD_POLICY interchange)
+    endif()
+    if(_GUARD_POLICY STREQUAL "interchange")
+        set(_dirs renderer)
+        set(_allow ${_noto3d_cpu_renderer_allowlist})
+        set(_adr "ADR-0012 ②/③")
+    elseif(_GUARD_POLICY STREQUAL "closed")
+        set(_dirs renderer asset ui)
+        set(_allow "")
+        set(_adr "ADR-0013 Q11")
+    else()
+        message(FATAL_ERROR
+            "[arch-guard] unknown POLICY '${_GUARD_POLICY}' for ${_target}")
+    endif()
+
     get_target_property(_own_dirs ${_target} INCLUDE_DIRECTORIES)
     get_target_property(_deps ${_target} LINK_LIBRARIES)
     set(_probe_dirs ${_own_dirs})
@@ -319,22 +342,38 @@ function(noto3d_assert_target_reaches_no_gl _target _label)
             if(NOT _hit EQUAL -1)
                 message(FATAL_ERROR
                     "[arch-guard] ${_src} reaches the GL/windowing header '${_forbidden}' — "
-                    "${_label} must not resolve GL (ADR-0012 ②/③).")
+                    "${_label} must not resolve GL (${_adr}).")
             endif()
         endforeach()
-        # src/renderer/: per-file basename against the interchange allowlist.
+        # Project headers: per-file basename against the policy's allowlist.
+        # The closure paths are matched after lexical normalization, because
+        # -M echoes a relative include exactly as written
+        # ("src/serialization/../asset/x.hpp").  Matching "/src/asset/"
+        # against that raw text silently misses it — the same un-normalized-path
+        # trap that a basename comparison of glad/gl.h vs gl.h would hit.
         string(REGEX MATCHALL "[^ \n]+" _closure_files "${_closure}")
         foreach(_f IN LISTS _closure_files)
-            if("${_f}" MATCHES "/src/renderer/")
-                get_filename_component(_fname "${_f}" NAME)
-                if(NOT "${_fname}" IN_LIST _noto3d_cpu_renderer_allowlist)
-                    message(FATAL_ERROR
-                        "[arch-guard] ${_src} reaches '${_fname}' under src/renderer/ — "
-                        "the only permitted headers there are the GL-free interchange "
-                        "structs vertex.hpp and material.hpp (ADR-0012 ①).  ${_label} must "
-                        "not reach a GPU-owning header.")
-                endif()
+            if(IS_ABSOLUTE "${_f}")
+                set(_f_abs "${_f}")
+            else()
+                get_filename_component(_f_abs "${_f}" ABSOLUTE
+                    BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
             endif()
+            foreach(_d IN LISTS _dirs)
+                if("${_f_abs}" MATCHES "/src/${_d}/")
+                    get_filename_component(_fname "${_f_abs}" NAME)
+                    if(NOT "${_fname}" IN_LIST _allow)
+                        if(_allow)
+                            set(_why "the only headers permitted there are ${_allow}")
+                        else()
+                            set(_why "${_label} reaches no project header under src/${_d}/")
+                        endif()
+                        message(FATAL_ERROR
+                            "[arch-guard] ${_src} reaches '${_fname}' under src/${_d}/ — "
+                            "${_why}.  (${_adr})")
+                    endif()
+                endif()
+            endforeach()
         endforeach()
     endforeach()
 endfunction()
@@ -463,6 +502,54 @@ target_link_libraries(noto3d-scene-tests PRIVATE noto3d_scene noto3d_core)
 noto3d_set_warnings(noto3d-scene-tests)
 noto3d_apply_sanitizers(noto3d-scene-tests)
 add_test(NAME scene-entity-contract COMMAND noto3d-scene-tests)
+
+# ---------------------------------------------------------------------------
+# Serialization library (ADR-0013 Q11) — GL-free; links only noto3d_scene + JSON
+# ---------------------------------------------------------------------------
+add_library(noto3d_serialization STATIC
+    src/serialization/scene_io.cpp)
+target_include_directories(noto3d_serialization PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/serialization
+    ${CMAKE_SOURCE_DIR}/src/scene)
+target_link_libraries(noto3d_serialization
+    PUBLIC  noto3d_scene
+    PRIVATE nlohmann_json::nlohmann_json)
+noto3d_set_warnings(noto3d_serialization)
+noto3d_apply_sanitizers(noto3d_serialization)
+
+# Architecture guard 1 (link) — enforced at configure time (ADR-0013 Q11).
+# The serializer must link only noto3d_scene and nlohmann_json (the latter PRIVATE).
+# Inputs come from the target's own CMake properties so the check cannot drift.
+# noto3d_core is forbidden for the same concrete reason as in the asset_cpu guard:
+# it PUBLIC-exports lib/glad/include, giving the serializer a back-door to GL.
+set(_noto3d_serial_forbidden_libs
+    noto3d_asset noto3d_asset_cpu noto3d_renderer noto3d_ui noto3d_core
+    glad glad2 OpenGL::GL imgui glfw GLFW)
+get_target_property(_noto3d_serial_link_libs noto3d_serialization LINK_LIBRARIES)
+foreach(_lib IN LISTS _noto3d_serial_forbidden_libs)
+    if("${_lib}" IN_LIST _noto3d_serial_link_libs)
+        message(FATAL_ERROR
+            "[arch-guard] noto3d_serialization links '${_lib}' — the serializer "
+            "must stay GL-free and asset-free (ADR-0013 Q11).  Move the dependency "
+            "to a higher layer or keep the serializer's link closed to "
+            "noto3d_scene + nlohmann_json only.")
+    endif()
+endforeach()
+unset(_noto3d_serial_link_libs)
+unset(_noto3d_serial_forbidden_libs)
+unset(_lib)
+
+# Architecture guard 2 (includes) — enforced at configure time (ADR-0013 Q11).
+# POLICY closed: the serializer may reach src/scene and nothing else in the
+# project — not src/renderer/, not src/asset/, not src/ui/.  Guard 1 stops the
+# *link*; this guard stops the *include*, so a stray relative
+# #include "../asset/asset_registry.hpp" fails by name at configure time instead
+# of compiling and only tripping the linker later.
+# The shared noto3d_assert_target_reaches_no_gl() function (defined above near
+# noto3d_asset_cpu) provides exactly this probe: it derives the include closure
+# from the target's own CMake properties so it cannot miss a live dependency.
+noto3d_assert_target_reaches_no_gl(noto3d_serialization
+    "the serialization library" POLICY closed)
 
 # ---------------------------------------------------------------------------
 # Application library (ADR-0008/0010): app-layer orchestration, no GL state
