@@ -1,25 +1,13 @@
 #pragma once
 
+#include "vertex.hpp"
+
 #include <glad/gl.h>
-#include <glm/glm.hpp>
 
 #include <cstdint>
 #include <span>
 
 namespace noto3d::renderer {
-
-// ---------------------------------------------------------------------------
-// Vertex layout — interleaved, 32 B stride (ADR-0006)
-//   location 0 : position  vec3   offset  0
-//   location 1 : normal    vec3   offset 12
-//   location 2 : uv        vec2   offset 24
-// ---------------------------------------------------------------------------
-struct Vertex {
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec2 uv;
-};
-static_assert(sizeof(Vertex) == 32, "Vertex stride must be 32 B (ADR-0006)");
 
 // ---------------------------------------------------------------------------
 // Vertex attribute locations — fixed contract shared by all shaders (ADR-0006).

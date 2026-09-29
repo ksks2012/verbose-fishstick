@@ -2,7 +2,7 @@
 
 #include "manifest_types.hpp"
 #include <material.hpp>
-#include <mesh.hpp>
+#include <vertex.hpp>
 
 #include <filesystem>
 #include <string>
