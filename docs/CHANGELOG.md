@@ -3,6 +3,93 @@
 ## [Unreleased] — M5 ImGui Editor (complete; 0028–0034 archived; four manual smoke items open in 0033)
 
 ### Architecture — asset CPU/GPU boundary (0027 spike → ADR-0012)
+- **0039 — asset CPU/GPU split close-out: graph recorded, full regression re-run.** The last tracer
+  ticket, and the explicit "did the refactor change anything observable?" check. Its top-level
+  invariant — **zero externally observable behaviour change** — is verified two ways. *Structurally:*
+  the whole 0036–0039 chain touched **no** file in `src/scene/`, `src/app/draw_list.*`,
+  `src/app/editor.*` or `src/ui/`, and every public declaration of `AssetRegistry` is byte-identical
+  to pre-chain, so the M4 contracts (registry sole authority, `Scene` pure data, the
+  `collectDrawItems` seam, the borrowed `DrawItem::model`) never had an opportunity to move.
+  *Behaviourally:* clean dev + release builds at **0 warnings**, ctest **22/22** in both, both close
+  matrices **ALL PASS**, the 0024/0033 CLI exit-code matrix unchanged, the GL-free link line and 0
+  GL/glad symbols re-confirmed, and the manual tier-B `xprop` `WM_NAME` titles **actually executed**
+  for all three entry modes on a real display (Weston/llvmpipe). The final target graph was read
+  out of CMake itself with a `cmake_language(DEFER)` probe rather than transcribed from the ADR, and
+  matches ADR-0012 ② including the 0037 amendment. No production code changed.
+  Close-out audit residue is filed as **0040** (two ADR-0012 ①/③ invariants nothing asserts — one of
+  which has a `check(... || true)` that can never fail). The 0036–0039 chain is now **complete and
+  archived**, closing the 0027 spike.
+  See `docs/archive/ticket/0039-asset-cpu-split-closeout.md`, `docs/summary/0039-asset-cpu-split-closeout.md`.
+- **0038 — `tests/asset` and `--list-assets` stop linking GL** (ADR-0012 ③, tracer 3). The concrete
+  win the 0027 spike was opened to price. `asset_registry.hpp` is now **GL-free** — it no longer
+  includes `model.hpp`/`texture.hpp` and instead re-declares `renderer::Model`
+  (`using Model = std::vector<SubMesh>` over an incomplete `SubMesh`) and `renderer::Texture`,
+  which is sound because the registry only holds them behind `shared_ptr` and hands out borrowed
+  pointers. `AssetRegistry` is split across two translation units: `asset_registry_cpu.cpp` (in
+  `noto3d_asset_cpu`) defines `loadManifestOnly()`, `loadModelShapesOnly()` and every read-only
+  accessor; `asset_registry.cpp` (in `noto3d_asset`) keeps `load()`, `loadModelFile()`, `reload()`
+  and `uploadToGpu()`. The single mode-branching `doLoad(path, mode)` became two mode-specific
+  drivers over **one shared** `loadManifestCpu()` pipeline, so the CPU half cannot drift between
+  modes. `noto3d-registry-tests` now links `noto3d_asset_cpu` (+ `noto3d_core` for the `log.hpp`
+  facade, the same test-only trade `noto3d-manifest-tests` makes) and its link line contains **no
+  `noto3d_renderer`, no `glad`, no `libGL`** in dev or release. `runListAssetsCommand()` resolves its
+  listing through `parseManifest()` + `loadManifestCpu()` with no `AssetRegistry` in it at all;
+  output diffed byte-identical (modulo timestamps) against the old implementation, both on the clean
+  manifest and with a warning-producing probe entry — a `parseManifest()`-only version would have
+  looked identical while silently dropping every per-asset `M3_WARN`. `reload()` deliberately stays
+  in the facade (it must repeat a Full load, and ADR-0010 relies on it invalidating borrowed
+  `DrawItem::model` pointers), so its two cases moved to a new GL-linked target
+  `noto3d-registry-reload-tests`; **no assertion was dropped** — this is the ticket's own escape
+  clause, and it amends the ticket's 21/21 count to **22/22**. A third configure-time guard (the same
+  shared include-closure function, applied to the test) keeps the CPU suite honest: `noto3d_core`
+  puts `lib/glad/include` on its include path, so only a closure probe separates "GL is on the path"
+  from "GL is actually reached"; `#include <glad/gl.h>` and `#include <model.hpp>` both fail
+  configure. `noto3d-editor`/`noto3d_app` link graphs unchanged. ctest **22/22 dev + release**, both
+  close matrices ALL PASS, CLI exit-code matrix unchanged. Also removed a duplicated
+  `target_link_libraries(noto3d_asset ...)` call left by 0037.
+  **Code review (two axes) then found and fixed one real regression:** the GPU dedup probe had been
+  ordered *ahead* of the `fallback_geometry` resolution, where the pre-split code resolved fallback
+  first — so an entry that hit the dedup fast path silently stopped reporting an unresolvable
+  `fallback_geometry` and stopped degrading `overall`. Unreachable on the frozen manifest and
+  invisible to the GL-free suite, so nothing had failed; it is now pinned by
+  `testGpuDedupOrderingKeepsFallbackWarning` (verified red-green). The review also extracted the
+  ADR-0007 per-entry epilogue as `validateCpuRecord()` and the two load drivers' shared preamble as
+  `runManifestPipeline()` (the "one pipeline" claim did not hold until then), and corrected a stale
+  `21/21` in ADR-0012 plus this ticket's overstated "names unchanged" wording.
+  See `docs/archive/ticket/0038-asset-cpu-no-gl-link.md`, `docs/summary/0038-asset-cpu-no-gl-link.md`.
+- **0037 — create the GL-free `noto3d_asset_cpu` target** (ADR-0012 ②, tracer 2). The CPU asset core
+  moves out of the GPU facade into `src/asset/asset_cpu.{hpp,cpp}`: `CpuObj`, the ADR-0007
+  `isUnsafePath()` predicate (**one definition now shared by both sides of the split**),
+  `parseManifest()`, the CPU diagnostics, the 0013 texture-ref scan, `aggregateResults()`, and
+  `CpuCache` (canonical-path dedup, "do not cache FAILED" preserved). `noto3d_asset` keeps its name
+  and its **public API byte-for-byte** — it now holds only `uploadToGpu()`, the GPU caches and the
+  per-asset status bookkeeping, and is a facade over the CPU core. One authority, two libraries:
+  the registry still owns both caches. `nm -C libnoto3d_asset_cpu.a` → **0** `gl*`/`glad` symbols,
+  and the only `noto3d::renderer::` types it contains are `Vertex` and `Material`. The boundary is
+  enforced by two configure-time arch guards (link-level, and a preprocessor include-closure guard
+  whose `src/renderer/` check is an **allowlist**, so a new renderer header fails the build until
+  classified). Both guards derive their inputs from the target's own CMake properties. ctest
+  **21/21 dev + release**, both close matrices ALL PASS, `--list-assets` still `count=6` with no
+  `libGL` on the binary. Two implementation-forced link additions are recorded as an ADR-0012
+  amendment (`glm::glm` PUBLIC, `spdlog::spdlog` PRIVATE — the latter linked *directly* so
+  `noto3d_core` cannot drag `lib/glad/include` back onto the CPU target). The code review caught a
+  live bug here: without the `glm` link the CPU target was resolving a **system glm 0.9.9** against
+  the project's pinned **1.0.1** — an ODR split across the boundary, hidden by a guard whose `-I`
+  list had drifted from the real build. See `docs/archive/ticket/0037-asset-cpu-target.md`.
+- **0036 — extract `renderer::Vertex` into a GL-free `vertex.hpp`** (ADR-0012 ①, tracer 1). The
+  32 B `Vertex` layout (ADR-0006) moves from `mesh.hpp` to its own `src/renderer/vertex.hpp`;
+  `mesh.hpp` keeps only the GL-owning half (`Attrib` `GLuint` locations, `Mesh` VAO/VBO/EBO) and
+  includes it. **No type renamed, no namespace change, no `using` alias** — the CPU asset parse
+  header `obj_loader.hpp` now names `Vertex` via `vertex.hpp` instead of reaching `glad/gl.h`
+  through `mesh.hpp`. Verified by include-closure: at HEAD `obj_loader.hpp` pulled 2 glad headers
+  (`glad/gl.h`, `KHR/khrplatform.h`); after the change, 0. `asset_registry.hpp` still reaches glad
+  by design — it is the GPU-facing facade exposing `renderer::Model*`, and ADR-0012 ② keeps it
+  there permanently (only the CPU half becomes GL-free). Builds clean with 0 warnings, **ctest 21/21
+  dev + release**, and both `m5-close-matrix.sh` runs ALL PASS. Also corrected a now-stale comment
+  cross-reference in `texture.cpp` (the stride invariant moved out of `mesh.hpp`) and amended this
+  chain's tickets: 0036's original static check (`grep "glad/gl.h" src/asset/*.hpp`) was
+  **vacuous** — the literal string was never in the file, only in its transitive includes — so
+  0037–0039 must use the closure form.
 - **0027 — asset CPU/GPU boundary architecture spike. Closed.** The M6 gate is resolved: the spike
   confirmed the premise correction — **the runtime CPU/GPU boundary already existed and was already
   enforced** (`src/asset/` makes no direct GL call; `loadObjShapes`/`CanonicalShape`/
@@ -31,6 +118,10 @@
   `tests/asset` + `--list-assets`, prove the GL-free link · **0039** close-out (graph record + full
   regression + docs). These are code-quality and do **not** block M6 scope. **This spike wrote no
   production code**; 0025 stays verification-only for ③/⑤.
+  **All four complete 2026-09-29; the chain is closed and archived** — see the 0039 entry above.
+  The 0037 amendment it delivers: `glm` PUBLIC and `spdlog` linked *directly* on
+  `noto3d_asset_cpu`, never via `noto3d_core`, whose PUBLIC `lib/glad/include` would otherwise put
+  glad back on the CPU include path.
 
 ### M5 — close (0033)
 - **0033 — M5 integration/regression matrix + manual docking smoke.** Closed the M5 editing surface

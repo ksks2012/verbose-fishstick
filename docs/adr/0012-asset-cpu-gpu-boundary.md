@@ -1,6 +1,7 @@
 # ADR-0012 — Asset CPU/GPU boundary: `noto3d_asset_cpu` + `noto3d_asset`
 
-Status: Accepted (spike, ticket 0027; execution tickets 0036–0039)
+Status: Accepted (spike, ticket 0027; execution tickets 0036–0039 — **chain complete and
+archived 2026-09-29**; close-out audit residue in ticket 0040)
 
 > Per DOCUMENTATION-LIFECYCLE: this ADR carries the **type-ownership and library-shape decision**
 > for the asset CPU/GPU boundary (ticket 0027's spike). It **supersedes no earlier decision**;

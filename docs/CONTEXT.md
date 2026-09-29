@@ -24,7 +24,7 @@ determined ownership model. M0
 (Environment/build),
 M0.5 (Asset contract spike), M1 (minimal renderer + pass hygiene), M2 (0008 → 0014 → 0009 → 0013 +
 0012/0011/0010) and M3 (0015 → 0016 → 0017 → 0018) are done and verified. Completed tickets are
-archived at `docs/archive/ticket/` (all 32). Working tree state:
+archived at `docs/archive/ticket/` (all 36, after the 0036–0039 chain closed 2026-09-29). Working tree state:
 
 - `noto3d-editor` consumes the AssetRegistry: `--asset=<id>` (default first renderable manifest
   asset) and `--demo` (0014 fixture) render through the registry; 0009's E2E gate is closed
@@ -65,11 +65,13 @@ items remain an open follow-up (real window session required). ADR-0008, ADR-001
 Per DOCUMENTATION-LIFECYCLE, specs live at
 the ADR layer: the M3 spec is embedded in **ADR-0009**, the M4 spec in **ADR-0010**, the M5 spec
 in **ADR-0011**; the asset CPU/GPU boundary decision is in **ADR-0012** (its execution tickets are
-0036–0039). `docs/ticket/` holds execution tickets (0026 is M5-adjacent, still open, waiting
-only on 0028; 0035 is code-quality and does not block M6; 0033 is
-in-progress on its four manual-smoke boxes; 0027 is **complete and archived — decided in ADR-0012**,
-its implementation 0036–0039 is open and does not block M6), plus
-0020–0025, 0027 (the ADR-0012 spike record) and 0028–0034 archived under accepted ADRs.
+0036–0039, all now complete and archived). `docs/ticket/` holds execution tickets (0026 is
+M5-adjacent, still open, waiting only on 0028; 0035 is code-quality and does not block M6; 0033 is
+in-progress on its four manual-smoke boxes; **0040 is the ADR-0012 close-out residue — two ①/③
+invariants the ADR states but nothing asserts; code-quality, does not block M6**; 0027 is
+**complete and archived — decided in ADR-0012**, its implementation 0036–0039 is **complete and
+archived — closed 2026-09-29**), plus
+0020–0025, 0027 (the ADR-0012 spike record), 0028–0034 and 0036–0039 archived under accepted ADRs.
 M0 scope, user stories and acceptance matrix: `docs/archive/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
 Project overview / build / test quickstart: repo-root `README.md`.
@@ -193,12 +195,25 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
     owner** of both the CPU and GPU caches (a facade over two libraries, not two authorities —
     ADR-0007 verbatim); `DrawItem::model` stays the borrowed frame-local `const renderer::Model*`
     (ADR-0010 Q5), invalidated by `reload()`; the 0012 GL-owning-lifetime rule is untouched.
-    ② **Real split:** new `noto3d_asset_cpu` (json+tinyobjloader only; no renderer/glad/libGL) holds
-    the parse/dedup/manifest core; `noto3d_asset` (unchanged name + public contract) depends on it
-    and keeps `uploadToGpu()`, the GPU caches and all six `AssetRegistry` entry points.
+    ② **Real split:** new `noto3d_asset_cpu` (json+glm PUBLIC, tinyobjloader+spdlog PRIVATE; **no
+    renderer / no `noto3d_core` / no glad / no libGL** — spdlog is linked *directly* precisely so
+    `noto3d_core` cannot drag `lib/glad/include` back on, and `glm` must be linked explicitly or
+    the CPU half silently resolves a system glm instead of the pinned `lib/glm`) holds
+    the parse/dedup/manifest core **and the `RegistryResult` aggregation** (`aggregateResults()`,
+    GL-free, so ③'s CLI path needs no facade); `noto3d_asset` (unchanged name + public contract)
+    depends on it and keeps `uploadToGpu()`, the GPU caches and all six `AssetRegistry` entry
+    points. The boundary is **machine-enforced**, not conventional: two configure-time arch guards
+    (a link guard, and a preprocessor include-closure guard whose `src/renderer/` check is an
+    **allowlist** of `{vertex.hpp, material.hpp}` so any new renderer header fails the build until
+    classified) — both derive their inputs from the target's own CMake properties, because a
+    hand-written list once drifted and hid a live system-glm-vs-pinned-glm ODR bug.
     ③ `loadManifestOnly()`/`loadModelShapesOnly()` are **kept** (0025③) as thin CPU-only paths;
     escape hatches + the 0013 path predicate unchanged; **`tests/asset` + `--list-assets` stop
-    linking GL** (the concrete win). Rejected: single-lib GL-free header subset (kept as tracer 1),
+    linking GL** (the concrete win — **delivered by 0038**: `asset_registry.hpp` is GL-free,
+    `AssetRegistry` is split across `asset_registry_cpu.cpp` / `asset_registry.cpp` over one shared
+    `loadManifestCpu()` pipeline, the registry test's link line carries no renderer/glad/libGL, and
+    the CLI path holds no `AssetRegistry`; `reload()` stays in the facade with its 2 cases in a
+    GL-linked target, no assertions dropped). Rejected: single-lib GL-free header subset (kept as tracer 1),
     keep-as-is, renderer-side upload (inverts M4), split CPU/GPU `Material` (duplicates ADR-0006),
     asset-owned `Vertex`/`Material` copies (32 B layout drift). **Supersedes no prior ADR** — 0006,
     0007, 0008, 0009, 0010, 0011 all stand; this is additive.
@@ -314,10 +329,37 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   M5 added no GPU-resource ownership; asset editing mutates `assetId` only. Preserved M4 contracts
   (AssetRegistry sole authority, Scene pure data, app-layer `collectDrawItems` seam, borrowed
   `DrawItem::model`) all hold. **Gate closed — M6 may proceed.**
-- 0036–0039 (ADR-0012 execution, CPU-first tracer chain) — `docs/ticket/`: 0036 extract
-  `renderer/vertex.hpp` (GL-free `Vertex`) · 0037 create `noto3d_asset_cpu` ·
-  0038 retarget `tests/asset` + `--list-assets`, prove GL-free link · 0039 close-out (graph record
-  + full regression + docs). Code-quality; **does not block M6**.
+- 0036–0039 (ADR-0012 execution, CPU-first tracer chain) — **`docs/archive/ticket/`**: **0036 complete
+  2026-09-29** (`renderer/vertex.hpp` extracted; `obj_loader.hpp`'s include closure is now
+  glad-free — 2 glad entries at HEAD, 0 after; ctest 21/21 dev+release, both close matrices ALL
+  PASS) · **0037 complete 2026-09-29** (`noto3d_asset_cpu` created: `asset_cpu.{hpp,cpp}` holds
+  `CpuObj`/`isUnsafePath`/`parseManifest`/CPU diagnostics/`aggregateResults`/`CpuCache`;
+  `AssetRegistry` public API byte-for-byte unchanged as a facade over it; `nm` → 0 `gl*`/glad
+  symbols and only `Vertex`+`Material` of `noto3d::renderer`; two configure-time arch guards, both
+  proven to fire; ctest 21/21 dev+release, both close matrices ALL PASS) · **0038 complete
+  2026-09-29** (`asset_registry.hpp` is GL-free — re-declares `renderer::Model` as
+  `vector<SubMesh>` over an incomplete `SubMesh`, plus `Texture`; `AssetRegistry` split across
+  `asset_registry_cpu.cpp` (CPU lib: `loadManifestOnly`/`loadModelShapesOnly`/accessors) and
+  `asset_registry.cpp` (facade: `load`/`loadModelFile`/`reload`/`uploadToGpu`), with one shared
+  `loadManifestCpu()` pipeline so the two modes cannot drift; `noto3d-registry-tests` link line has
+  **no `noto3d_renderer`/`glad`/`libGL`** (dev+release), guarded by a third arch guard over the
+  test's include closure since `noto3d_core` contributes glad's *include dir*; `--list-assets` now
+  uses `parseManifest()`+`loadManifestCpu()` with no `AssetRegistry` and is byte-identical, proven
+  with a warning-producing probe entry; `reload()` stays in the facade per ADR-0010, so its 2 cases
+  moved to `noto3d-registry-reload-tests` — **no assertion dropped**, ctest **22/22** dev+release
+  (ticket invariant amended from 21/21), both close matrices ALL PASS; post-review: GPU dedup probe
+  re-ordered back *after* the `fallback_geometry` resolution to match pre-split behaviour, and the
+  ordering is now pinned by a red-green test — see `docs/summary/0038-asset-cpu-no-gl-link.md`)
+  · **0039 close-out complete 2026-09-29** — the final target graph was read out of CMake itself
+  (a `cmake_language(DEFER)` probe, not copied from the ADR) and matches ADR-0012 ② including the
+  0037 amendment; the **top-level "zero observable change" invariant holds structurally**: the whole
+  0036–0039 chain touched **no** file in `src/scene/`, `src/app/draw_list.*`, `src/app/editor.*` or
+  `src/ui/`, and every public declaration of `AssetRegistry` is byte-identical to pre-chain
+  (`1a57a3f`; only the private side changed — `doLoad(path, mode)` split into `doLoadFull` +
+  `doLoadManifestOnly` over a shared `runManifestPipeline`). Clean dev+release builds 0 warnings, ctest **22/22** in both, both close matrices
+  ALL PASS, CLI exit-code matrix unchanged, GL-free link line + 0 GL/glad symbols, and the
+  tier-B `xprop` `WM_NAME` titles verified for all three entry modes on a real display.
+  Code-quality; **does not block M6**.
 - 0035 (declaration-only header conformance) — code-quality, independent of the M5 chain; does
   **not** block M5 close or M6. Ten remaining inline definitions (8 implicit-inline accessors in
   `renderer`/`ui` headers + 2 free `inline` conversions added by 0030's `transform_edit.hpp`; 2 of

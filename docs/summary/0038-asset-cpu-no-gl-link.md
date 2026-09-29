@@ -2,7 +2,7 @@
 
 - **Date**: 2026-09-29
 - **Spec/ADR Path**: `docs/adr/0012-asset-cpu-gpu-boundary.md` ③ (link-graph boundary)
-- **Ticket Path**: `docs/ticket/0038-asset-cpu-no-gl-link.md` (complete; archived at close of the
+- **Ticket Path**: `docs/archive/ticket/0038-asset-cpu-no-gl-link.md` (complete; archived at close of the
   0036–0039 chain, per 0039)
 - **Fixed point for review**: HEAD `db5db54` (0037)
 - **Branch**: `main`

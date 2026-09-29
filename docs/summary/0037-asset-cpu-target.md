@@ -2,7 +2,7 @@
 
 - **Date**: 2026-09-29
 - **Spec/ADR Path**: `docs/adr/0012-asset-cpu-gpu-boundary.md` ② (library shape)
-- **Ticket Path**: `docs/ticket/0037-asset-cpu-target.md` (complete; archived at close of the
+- **Ticket Path**: `docs/archive/ticket/0037-asset-cpu-target.md` (complete; archived at close of the
   0036–0039 chain, per 0039)
 - **Fixed point for review**: HEAD `840ea40`
 - **Branch**: `main`

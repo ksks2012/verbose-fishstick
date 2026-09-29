@@ -62,7 +62,8 @@ is **header/type and link coupling**:
 - **0037** create `noto3d_asset_cpu`; move `CpuObj`/`loadCpuRecord`/parse/dedup; keep `AssetRegistry`
   as a thin CPU-consuming facade with an unchanged public API.
 - **0038** retarget `tests/asset` + `--list-assets` onto `noto3d_asset_cpu`; prove the GL-free link.
-- **0039** close-out: record the final CMake graph, re-run ctest dev+release (21/21) + the CLI /
+- **0039** close-out: record the final CMake graph, re-run ctest dev+release (22/22 — the count 0038
+  moved off 21/21; see the 0038 summary) + the CLI /
   m5-close matrices + xprop titles, update CONTEXT + CHANGELOG.
 
 None of 0036–0039 block M6 scope; they are code-quality work on a determined ownership model.

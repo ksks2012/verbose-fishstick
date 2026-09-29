@@ -2,7 +2,7 @@
 
 - **Date**: 2026-09-29
 - **Spec/ADR Path**: `docs/adr/0012-asset-cpu-gpu-boundary.md` ① (type ownership)
-- **Ticket Path**: `docs/ticket/0036-extract-vertex-gl-free-header.md` (complete; archived at close
+- **Ticket Path**: `docs/archive/ticket/0036-extract-vertex-gl-free-header.md` (complete; archived at close
   of the 0036–0039 chain, per 0039)
 - **Fixed point for review**: HEAD `1a57a3f`
 - **Branch**: `main`
