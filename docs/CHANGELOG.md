@@ -1,6 +1,34 @@
 # CHANGELOG
 
-## [Unreleased] — M5 ImGui Editor (0028–0032 landed; 0030–0032 manual evidence pending)
+## [Unreleased] — M5 ImGui Editor (complete; 0028–0034 archived; four manual smoke items open in 0033)
+
+### M5 — close (0033)
+- **0033 — M5 integration/regression matrix + manual docking smoke.** Closed the M5 editing surface
+  as a whole, mirroring 0024's role for M4 (ADR-0010 Q8 / ADR-0011 Q8 shape): no readback,
+  screenshot comparison, or image similarity — an automated matrix (exit codes + structured
+  runtime-log assertions + CTest) plus manual, platform-specific evidence recorded in the ticket.
+  `scripts/m5-close-matrix.sh <build-dir> [--release]` runs the full two-tier check: CLI exit-code
+  matrix (pre-GL rows assert exit codes on both configs; GL rows assert exact exit codes on release
+  and log-line content on dev, where the documented Mesa llvmpipe LeakSanitizer 112-byte leak makes
+  GL runs exit 1 while still emitting correct structured logs); structured-log content + ordering
+  (`M0_OK` → `M3_INFO`/`M2_OK` → `M4_INFO entities=N` → `M1_DONE`) for default / `--asset=smile`
+  (also `crown`) / `--demo`; `--list-assets` output frozen; the headless app suites asserting the
+  M5 op logs directly via capture sinks. **M5_SEL coverage added** (`tests/app/editor_test.cpp` now
+  asserts the selection line `M5_SEL entity='…' id=N` and that deselect stays silent) — the one M5
+  op not previously wired into a log assertion. Static contract checks: `collectDrawItems` remains
+  the sole render entry with resolver-only `registry.model(` calls; `DrawItem::model` is still a
+  borrowed pointer; `noto3d_app` links neither ImGui nor GLFW.
+- **M4 contracts re-verified unchanged:** the six CLI exit-code rows, `M0_OK`/`M3_INFO`/`M4_INFO`/
+  `M2_OK` content + ordering, `--list-assets`, and `xprop` `WM_NAME` titles
+  (`m4_vertical_scene | noto3d (M4)` / `<id> [placeholder] | noto3d (M4)` /
+  `demo_checker [placeholder] | noto3d (M4)`) all match M4 exactly — the editor was added beside the
+  runtime, not over it.
+- **Result:** matrix green on dev + release (release 30/30 checks), ctest **21/21 dev + release**
+  0 warnings on full rebuilds, 0028–0034 archived under ADR-0011, execution summary under
+  `docs/summary/0033-m5-close-integration-regression.md`. **Open:** the four manual docking/edit
+  smoke boxes (docking resize + non-square aspect, full editing pass, interaction ownership,
+  no-gizmo/no-undo confirmation) require a real window session and are recorded as an open follow-up
+  in ticket 0033 — not automatable in this environment.
 
 ### M5 — implemented (0028, 0029)
 - **0028 — editor shell, `ViewportRect`, input-ownership gate.** Docked host with the 3D view as a

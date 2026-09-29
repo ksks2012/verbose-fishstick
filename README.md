@@ -1,17 +1,19 @@
 # noto3d — Noto 3D Emoji Editor (MVP)
 
-C++/OpenGL editor MVP for Noto 3D-style emoji composition. With M0–M3 complete this is an
-engine slice — an asset pipeline plus a minimal windowed renderer (manifest assets the user
-picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-entity composition
-+ transforms + camera), then interactivity in M5.
+C++/OpenGL editor MVP for Noto 3D-style emoji composition. With M0–M5 complete this is a
+docked editor built on a real Scene engine: an asset pipeline plus a minimal windowed renderer
+(manifest assets the user picks, plus a textured demo fixture), a pure-data Scene model with
+multi-entity composition + transforms + camera (M4), and a full ImGui editing surface — select,
+transform, swap asset, create, delete — with end-to-end structured observability (M5).
 
-- **Language / API:** C++20, OpenGL **3.3 Core** / GLSL 330, GLFW 3.4 (X11), GLM, ImGui (M5),
-  nlohmann/json, tinyobjloader (OBJ/MTL), spdlog (Log backend), glad + stb_image (committed under
-  `lib/`)
+- **Language / API:** C++20, OpenGL **3.3 Core** / GLSL 330, GLFW 3.4 (X11), GLM,
+  **ImGui (docking)**, nlohmann/json, tinyobjloader (OBJ/MTL), spdlog (Log backend),
+  glad + stb_image (committed under `lib/`)
 - **Docs hierarchy:** `docs/CONTEXT.md` = current implementation truth; `docs/adr/` = decision
   history (+ embedded milestone specs); `docs/DEFINITION.md` = project vocabulary;
   `docs/CHANGELOG.md` = milestone history; `docs/archive/ticket/` = all execution tickets
-  (complete); `docs/ticket/` = pending (0026 M5 camera interaction; 0027 M6-preceding gate).
+  (complete, incl. M5 0028–0034); `docs/ticket/` = pending (0026 M5-adjacent camera interaction;
+  0027 M6-preceding gate; 0035 header conformance).
 
 ## Status
 
@@ -23,6 +25,7 @@ picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-en
 | **M2** | Asset pipeline (0008–0014) | ✅ complete — `AssetRegistry` + OBJ/MTL→Mesh, sRGB diffuse texture pipeline + E2E demo render, demo fixture, texture path safety |
 | **M3** | Noto vertical slice (0015–0018) | ✅ complete — fixture frozen (manifest-integrity contract test, ctest 5/5), selection diagnostics (`M3_INFO` identity line, dynamic title, `--list-assets`), human category verification |
 | **M4** | Scene composition & transform (0020–0024) | ✅ complete — pure-data Scene + draw-list seam + multi-entity runtime + orbit/zoom/pan camera; automated matrix + xprop titles + smoke; 0025 code-cleanup pass complete (ctest 15/15) |
+| **M5** | ImGui Editor (0028–0034) | ✅ complete — docked shell + `ViewportRect` + input-ownership gate, Hierarchy/selection/`Editor` facade, inspector numeric transform editing (degrees → scene radians YXZ), asset picker (value snapshot), create/destroy; closed on the automated close matrix (ctest 21/21, `scripts/m5-close-matrix.sh`) + xprop titles. Manual docking/edit smoke open as a follow-up (real window session required) |
 
 ### Completed tickets (`docs/archive/ticket/`)
 
@@ -37,14 +40,18 @@ picks, plus a textured demo fixture) — gaining its Scene model in M4 (multi-en
   predicate), 0012 app/renderer separation + registry integration, 0010 dependency pinning
 - **0011** M1 code-quality deferred findings (⑦⑧⑨⑩) — folded into 0012
 
-M4 tickets (0020–0025) are complete and archived. **M5's architecture is locked in ADR-0011**
-(docked editor layout, `ViewportRect`, `Editor`-owns-`Scene` facade, input-ownership gate); M5
-execution tickets are written as **0028–0034**, plus **0035** (code-quality, off-chain); **0028–0032** are implemented and
-  machine-verified, with manual evidence pending for 0030–0032. The remaining M5 chain is
-  **0033** (M5 close: integration regression + manual docking smoke); **0026** (M5 camera interaction semantics
-  & cursor baseline) and **0027** (M6-preceding asset CPU/GPU boundary gate) are the pending
-  side-tickets. All completed execution history lives under `docs/archive/ticket/`.
-  Current milestone: **M5 ImGui Editor**.
+M4 tickets (0020–0025) and M5 tickets (0028–0034) are complete and archived. **M5's architecture
+was locked in ADR-0011** (docked editor layout, `ViewportRect`, `Editor`-owns-`Scene` facade,
+input-ownership gate incl. the wheel) and its execution tickets shipped as **0028–0034**; the M5
+close is delivered by **`scripts/m5-close-matrix.sh`** (CLI exit-code + structured-log matrix for
+every entry mode, M5-op log assertions via the headless app suites, static seam checks) with
+**ctest 21/21 dev + release** and `xprop` titles re-verified unchanged from M4. The four manual
+docking/edit-smoke boxes of the close remain an open follow-up (require a real window session).
+**0026** (M5 camera interaction semantics & cursor baseline, M5-adjacent, waiting on 0028),
+**0027** (M6-preceding asset CPU/GPU boundary gate) and **0035** (header-conformance, code-quality)
+are the pending side-tickets, living under `docs/ticket/`. All completed execution history lives
+under `docs/archive/ticket/`. Current milestone: **M5 ImGui Editor complete — M6 Save/Load is
+next**.
 
 ## Build & test
 
@@ -59,8 +66,14 @@ build/dev/noto3d-editor                  # interactive window
 ```
 
 Structured-log prefixes: `M0_OK` (context/capability), `M1_OK` / `M1_DONE` (renderer, frame
-completion), `M2_*` (mesh/texture), `M3_INFO` (asset identity), `M4_INFO` (scene about to render),
-and `M5_SEL` (entity selection, ADR-0011 Q8 — logs `entity='<name>' id=<n>`).
+completion), `M2_*` (mesh/texture), `M3_INFO` (asset identity), `M4_INFO` (scene about to render
+— logs `entities=<N>`), and the M5 editing ops asserted by the headless app suites: `M5_SEL`
+(entity selection, `entity='<name>' id=<n>`), `M5_ASSET` (asset picker offered/hidden counts +
+assignment), `M5_XFRM` (transform commits, rotation in degrees+radians), `M5_ENTITY`
+(create/destroy, `count=<N>`).
+
+To re-run the M5 close matrix on any build dir (dev axis asserts log content; add `--release` for
+exact GL exit codes): `scripts/m5-close-matrix.sh build/release --release`.
 
 Presets: `dev` (Debug + sanitizer/debug-GL options), `dev-clean`, `release`. Our own code builds
 with `-Wall -Wextra -Wpedantic`; `-Werror` is opt-in (ADR-0008).
@@ -70,24 +83,30 @@ with `-Wall -Wextra -Wpedantic`; `-Werror` is opt-in (ADR-0008).
 ```text
 assets/                 manifest.json (v1, authoritative) + references/ (official PNGs),
                         geometry/ (placeholder OBJs incl. demo_checker fixture)
-src/                    app/ main.cpp · core/ Log + GL capability · renderer/ Mesh/Model/
-                        Material/ShaderProgram/Texture/Renderer · asset/ AssetRegistry+OBJ/MTL loader
+src/                    app/ editor facade + entity/transform/picker edit logic + close matrix ·
+                        ui/ ImGui presentation & input adaptation (docked editor shell) ·
+                        scene/ pure-data Scene (EntityId/Transform/Entity) · core/ Log + GL
+                        capability · renderer/ Mesh/Model/Material/ShaderProgram/Texture/Renderer ·
+                        asset/ AssetRegistry+OBJ/MTL loader · serialization/ (M6)
 shaders/                GLSL 330 base.vert / base.frag
 lib/                    pinned deps (glad + stb_image committed; six Git deps fetched:
                         GLFW/GLM/ImGui/json/tinyobjloader/spdlog, each on an immutable SHA)
-tests/                  dependency-free headless contract tests (asset/renderer/core)
+tests/                  dependency-free headless contract tests (asset/renderer/core/app)
 docs/                   CONTEXT/ADR/DEFINITION/CHANGELOG/ticket + archive
 ```
 
 ## Renderer key facts (ADR-0005/0006)
 
 - 3D pass state set **once per frame** by `Renderer::Begin3DPass`; `Material::cullEnabled` is the
-  only per-draw variance; no snapshot/restore until M5 ImGui overlay.
+  only per-draw variance. The editor shell (M5) confines the 3D clear/scissor to the viewport
+  rect and overlays ImGui afterwards — `Begin3DPass()` stays UI-agnostic.
 - 32B vertex `pos+normal+uv`, `GL_UNSIGNED_INT` indices, immutable `Mesh` after upload.
 - Straight alpha; linear clear `(0.12, 0.12, 0.14)`; sRGB framebuffer converts on output;
   diffuse textures allocate `GL_SRGB8_ALPHA8` (hardware sRGB→linear on sample); shader stays
   linear and never branches on missing vertex data.
 - `finalAlpha = effectiveAlpha * sampledAlpha`; `effectiveAlpha = baseColor.a * opacity`.
+- App layer (incl. `noto3d_app` editor logic) links **neither ImGui nor GLFW** — editor semantics
+  stay headless-testable; `src/ui/` is presentation/input adaptation only (ADR-0011 Q5).
 
 ## Asset & texture pipeline (ADR-0002/0007)
 
@@ -98,14 +117,14 @@ texture ref promotes the asset to `LOADED_WITH_WARNINGS` (geometry still renders
 
 ## Next steps
 
-1. **M5 ImGui editor** (overlay owns its GL state; ADR-0005 handoff point =
-   `Renderer::End3DPass()`; `lib/imgui` already fetched) — next milestone. Architecture accepted in
-   **ADR-0011** (docked layout, explicit `ViewportRect`, `Editor` owning the `Scene`, input-ownership
-   gate incl. the wheel); execution tickets **0028–0034** written; **0028** (shell + `ViewportRect`
-   + input gate) and **0029** (Hierarchy + selection + `Editor` facade) implemented and
-   machine-verified, manual evidence pending for both.
-2. **Pending follow-ups**: **0026** M5 camera interaction semantics & cursor baseline (M5-adjacent;
-   blocked by 0028, does **not** block the M5 close), **0027** asset CPU/GPU boundary gate
-   (**before M6**; premise corrected — the boundary already exists, what remains is header/type
-   coupling).
-3. **M6 Save/Load** — Scene JSON as a complete snapshot (forward contract in ADR-0010 Q4).
+1. **Manual M5 smoke (open follow-up)** — the four platform-specific boxes of ticket 0033
+   (docking move/resize with correct non-square viewport aspect, the full user edit pass,
+   interaction-ownership checks, no-gizmo/no-undo confirmation). Everything else about M5 is
+   machine-closed; these need a real windowed session.
+2. **Pending ticket work**: **0035** (declaration-only header conformance: 10 remaining inline
+   definitions in `renderer`/`ui` headers — code-quality, off-chain), **0026** (M5 camera
+   interaction semantics & cursor baseline; M5-adjacent, now waiting only on 0028),
+   **0027** (asset CPU/GPU boundary gate — **before M6**; premise corrected — the boundary already
+   exists, what remains is header/type coupling).
+3. **M6 Save/Load** — Scene JSON as a complete snapshot (forward contract in ADR-0010 Q4), with the
+   previous milestone's decisions carried forward.
