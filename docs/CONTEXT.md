@@ -416,9 +416,30 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   release (22 → 23), clean builds 0 warnings, both close matrices ALL PASS. Headless claim verified
   rather than assumed: no GL/GLFW/X11 on the link line, passes with `DISPLAY` unset, no
   `.scene`/`.json` opened under `strace`.
-- 0044 (strict structure / lenient references) · 0045 (CLI `--scene=` + `--save-scene=` + atomic
-  I/O) · 0046 (M6 close) — all `ready-for-agent`; blocking chain 0041‖0042 → 0043 → 0044 → 0045
-  → 0046, so with 0043 now complete **0044 is unblocked**
+- 0044 (strict structure / lenient references) — **complete 2026-09-30, uncommitted at the user's
+  request**: the read side now **hard-fails every structural defect** (no `Scene`, one diagnostic
+  each) while staying **lenient on references** — the serializer never consults the registry (the
+  0041 guard makes it impossible), so an unknown or empty `assetId` is retained verbatim for the
+  M4 draw-time seam to skip, and an empty `name` is legal. Diagnostics name the defect, the
+  `entities[N]` index and the **expected shape** (`must be an object` / `must be an integer` /
+  `must be a string` / `exactly 3 components, got 2`), always under the `scene_io: ` prefix. Two
+  findings the review surfaced are load-bearing: **`id` needs an upper bound, not just a lower
+  one** — `2^32` narrows to `0` on the unchecked `EntityId` cast, which loads silently with the
+  reserved `InvalidEntityId` under NDEBUG and **SIGABRTs** inside `fromEntities` in debug
+  (verified in both presets) — and the **entity index must be asserted for nested `transform`
+  defects**, not merely emitted. 0043's four ad-hoc structural loops were migrated into **one
+  `StructuralCase` table**, deliberately: this repo rejects duplicated policy because two copies
+  drift (ADR-0012 ③), and a defect in two tables is one the other half forgets. Each row asserts
+  no scene, a diagnostic, the defect named, the expectation stated, the index present, and the
+  *neighbour* guard's wording **absent** (guard isolation — three guards would otherwise fire
+  interchangeably and mask each other). Guard helpers (`requireField`/`requireString`/
+  `requireInteger`) collapsed 11 duplicated sites with every diagnostic string unchanged, so the
+  mutant count fell 31 → 27 with every survivor **stronger**. Suite **206 assertions**;
+  **27/27 mutations, 0 vacuous**; ctest **23/23** dev + release, 0 warnings, both close matrices
+  ALL PASS; headless claim re-verified.
+- 0045 (CLI `--scene=` + `--save-scene=` + atomic I/O) · 0046 (M6 close) — both `ready-for-agent`;
+  blocking chain 0041‖0042 → 0043 → 0044 → 0045 → 0046, so with 0044 now complete **0045 is
+  unblocked**
 
 ### M5 (spec embedded in ADR-0011; implemented, machine-verified, tickets archived)
 - 0028 (docked shell + `ViewportRect` + input-ownership gate) — complete, archived (headless

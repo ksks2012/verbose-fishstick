@@ -2,9 +2,11 @@
 #include "log.hpp"
 
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "scene.hpp"
@@ -142,104 +144,6 @@ void testVersionGate() {
 }
 
 // Invariant: structural failure always yields nullopt AND >= 1 diagnostic.
-void testStructuralFailureInvariants() {
-    const char* cases[] = {
-        R"(not json at all)",
-        R"(42)",
-        R"({"version":1,"entities":{}})",
-        R"({"version":1,"entities":[{"name":"x","assetId":"y","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]})",
-    };
-    const char* labels[] = {"malformed JSON", "non-object root", "non-array entities",
-                            "entity missing id"};
-    for (int i = 0; i < 4; ++i) {
-        LoadResult r = noto3d::serialization::deserializeScene(cases[i]);
-        char name[128];
-        std::snprintf(name, sizeof(name), "structural invariant: %s -> nullopt", labels[i]);
-        check(!r.scene.has_value(), name);
-        std::snprintf(name, sizeof(name), "structural invariant: %s -> diagnostic", labels[i]);
-        check(!r.diagnostics.empty(), name);
-    }
-}
-
-// Every case here is one a malformed document can actually produce. Each must
-// come back as a clean structural failure, because deserializeScene promises
-// never to throw and never to return partially-populated state -- an abort
-// through Scene::fromEntities' debug-only precondition assert would break that
-// promise harder than an exception would.
-void testMalformedEntityFieldsRejected() {
-    const char* cases[] = {
-        // id 0 is InvalidEntityId and would violate fromEntities' precondition.
-        R"({"version":1,"entities":[{"id":0,"name":"n","assetId":"a","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]})",
-        R"({"version":1,"entities":[{"id":-3,"name":"n","assetId":"a","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]})",
-        R"({"version":1,"entities":[{"id":1.5,"name":"n","assetId":"a","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]})",
-        R"({"version":1,"entities":[{"id":1,"name":5,"assetId":"a","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]})",
-        R"({"version":1,"entities":[{"id":1,"name":"n","assetId":7,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]})",
-        // transform missing / not an object / short and long vectors / non-numbers.
-        R"({"version":1,"entities":[{"id":1,"name":"n","assetId":"a"}]})",
-        R"({"version":1,"entities":[{"id":1,"name":"n","assetId":"a","transform":[0,0,0]}]})",
-        R"({"version":1,"entities":[{"id":1,"name":"n","assetId":"a","transform":{"position":[0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]})",
-        R"({"version":1,"entities":[{"id":1,"name":"n","assetId":"a","transform":{"position":[0,0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]})",
-        R"({"version":1,"entities":[{"id":1,"name":"n","assetId":"a","transform":{"position":["x",0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]})",
-        R"({"version":1,"entities":[{"id":1,"name":"n","assetId":"a","transform":{"rotation":[0,0,0],"scale":[1,1,1]}}]})",
-    };
-    const char* labels[] = {"id 0",          "negative id",   "non-integer id",
-                            "name not string", "assetId not string", "transform missing",
-                            "transform not object", "2-component position",
-                            "4-component position", "non-numeric component",
-                            "position missing"};
-    for (int i = 0; i < 11; ++i) {
-        LoadResult r = noto3d::serialization::deserializeScene(cases[i]);
-        char name[160];
-        std::snprintf(name, sizeof(name), "malformed entity: %s -> nullopt", labels[i]);
-        check(!r.scene.has_value(), name);
-        std::snprintf(name, sizeof(name), "malformed entity: %s -> diagnostic", labels[i]);
-        check(!r.diagnostics.empty(), name);
-    }
-}
-
-// Q4: the diagnostic must DISTINGUISH an unsupported version from a malformed
-// one. Three different user mistakes, so three different messages — a single
-// shared string would leave the user guessing which mistake they made.
-void testVersionDiagnosticsAreDistinct() {
-    const char* missing = R"({"entities":[]})";
-    const char* stringy = R"({"version":"1","entities":[]})";
-    const char* wrong = R"({"version":2,"entities":[]})";
-
-    const std::string dm = noto3d::serialization::deserializeScene(missing).diagnostics[0];
-    const std::string ds = noto3d::serialization::deserializeScene(stringy).diagnostics[0];
-    const std::string dw = noto3d::serialization::deserializeScene(wrong).diagnostics[0];
-
-    check(dm.find("missing") != std::string::npos,
-          "Q4: missing version diagnostic says 'missing'");
-    check(ds.find("malformed") != std::string::npos,
-          "Q4: non-integer version diagnostic says 'malformed'");
-    check(dw.find("unsupported") != std::string::npos,
-          "Q4: wrong-integer version diagnostic says 'unsupported'");
-    check(dm != ds && ds != dw && dm != dw,
-          "Q4: all three version diagnostics are distinct strings");
-}
-
-// Duplicate ids would trip Scene::fromEntities' uniqueness assert, aborting the
-// process instead of returning a diagnostic. The serializer must reject them
-// itself so the "never throws" contract holds in debug builds too.
-void testDuplicateIdsRejected() {
-    const char* dup = R"({"version":1,"entities":[
-      {"id":1,"name":"a","assetId":"x","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}},
-      {"id":1,"name":"b","assetId":"y","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]})";
-    LoadResult r = noto3d::serialization::deserializeScene(dup);
-    check(!r.scene.has_value(), "duplicate ids -> nullopt (no abort in fromEntities)");
-    check(!r.diagnostics.empty(), "duplicate ids -> diagnostic");
-
-    // A non-adjacent duplicate must be caught too, not just a consecutive pair.
-    const char* far = R"({"version":1,"entities":[
-      {"id":7,"name":"a","assetId":"x","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}},
-      {"id":8,"name":"b","assetId":"y","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}},
-      {"id":7,"name":"c","assetId":"z","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]})";
-    LoadResult r2 = noto3d::serialization::deserializeScene(far);
-    check(!r2.scene.has_value(), "non-adjacent duplicate ids -> nullopt");
-    check(!r2.diagnostics.empty(), "non-adjacent duplicate ids -> diagnostic");
-}
-
 // Invariant: determinism. The same Scene serializes to byte-identical text.
 void testDeterminism() {
     Scene scene;
@@ -302,6 +206,277 @@ void testFloatExactnessWideRange() {
           "float-exact: -0.0f keeps its sign bit");
 }
 
+
+// ===========================================================================
+// Ticket 0044 -- strict structure, lenient references.
+//
+// ONE table drives every structural assertion, and 0043's four ad-hoc case
+// loops were migrated into it.  That is deliberate: this repo rejects duplicate
+// policy on the grounds that two copies "can drift" (ADR-0012 (3), ADR-0013
+// Q11), and a defect listed in two tables is a defect half the suite forgets to
+// check.  Adding a structural defect is now one row, in one place.
+struct StructuralCase {
+    const char* label;         // what a user did wrong
+    std::string document;      // the offending document
+    const char* mustMention;    // the defect must be NAMED
+    const char* statesExpectation;  // the fix must be stated, or ""
+    const char* mustNotMention; // the NEIGHBOUR guard's wording, or ""
+};
+
+// The transform appears in nearly every case; spelling it once means a change to
+// the v1 document shape is one edit here rather than one per row.
+constexpr std::string_view kTransform =
+    R"({"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]})";
+
+std::string rawEntity(std::string_view fields) {
+    return "{" + std::string(fields) + "}";
+}
+
+std::string withTransform(std::string_view fields,
+                          std::string_view transform = kTransform) {
+    return rawEntity(std::string(fields) + R"(,"transform":)" + std::string(transform));
+}
+
+// A valid entity with the given fields plus a well-formed transform.  Cases
+// that omit or corrupt ONE field use this so every other field is still valid
+// and the guard under test is the only thing that can reject the document.
+std::string oneEntity(std::string_view id, std::string_view name, std::string_view assetId,
+                      std::string_view transform = kTransform) {
+    std::string fields;
+    fields += R"("id":)" + std::string(id);
+    fields += R"(,"name":)" + std::string(name);
+    fields += R"(,"assetId":)" + std::string(assetId);
+    return withTransform(fields, transform);
+}
+
+std::string sceneOf(const std::vector<std::string>& entities) {
+    std::string out = R"({"version":1,"entities":[)";
+    for (std::size_t i = 0; i < entities.size(); ++i) {
+        if (i) out += ",";
+        out += entities[i];
+    }
+    return out + "]}";
+}
+
+std::vector<StructuralCase> structuralCases() {
+    // NOTE these are raw JSON fragments, not C++ strings to quote: name and
+    // assetId need their quotes, an id must stay a JSON NUMBER so it reaches
+    // the integer guards (a quoted "1" is the wrong-TYPE case, its own row).
+    const std::string n = R"("n")", a = R"("a")", one = "1";
+    return {
+        // -- JSON shape ----------------------------------------------------
+        {"malformed JSON", "not json at all", "JSON", "", ""},
+        {"non-object root", "42", "root", "JSON object", ""},
+        {"root is a JSON string", R"("just a string")", "root", "JSON object", "version"},
+        {"missing version", R"({"entities":[]})", "missing", "integer", ""},
+        {"non-integer version", R"({"version":"1","entities":[]})", "malformed", "integer", ""},
+        {"unsupported version", R"({"version":2,"entities":[]})", "unsupported", "1", ""},
+        // The three version mistakes must not collapse into one message (Q4).
+        {"missing entities", R"({"version":1})", "missing", "", "must be an array"},
+        {"entities not an array", R"({"version":1,"entities":{}})", "entities", "array", ""},
+        // -- entity shape --------------------------------------------------
+        {"entity is a number", R"({"version":1,"entities":[5]})", "must be an object", "",
+         "missing 'id'"},
+        {"entity missing id", sceneOf({rawEntity(R"("name":"n","assetId":"a")")}), "id", "", ""},
+        {"id not an integer", sceneOf({oneEntity(R"("1")", n, a)}), "id", "integer", ""},
+        {"id 0 is the reserved InvalidEntityId", sceneOf({oneEntity("0", n, a)}), "id",
+         "InvalidEntityId", ""},
+        {"fractional id", sceneOf({oneEntity("1.5", n, a)}), "id", "integer", ""},
+        {"negative id reports the value", sceneOf({oneEntity("-3", n, a)}), "id", "-3", ""},
+        // 2^32 narrows to 0 == InvalidEntityId on an unchecked cast: in release it
+        // would load with the one id the format forbids, in debug it aborts.
+        {"id above EntityId range", sceneOf({oneEntity("4294967296", n, a)}), "id",
+         "4294967295", ""},
+        {"id one above EntityId range", sceneOf({oneEntity("4294967297", n, a)}), "id",
+         "at most", ""},
+        {"duplicate id, adjacent",
+         sceneOf({oneEntity("4", n, a), oneEntity("4", n, a)}), "entities[1]", "4", ""},
+        {"duplicate id, non-adjacent",
+         sceneOf({oneEntity("7", n, a), oneEntity("8", n, a), oneEntity("7", n, a)}),
+         "entities[2]", "7", ""},
+        // -- string fields -------------------------------------------------
+        {"name not a string", sceneOf({oneEntity(one, "5", a)}), "name", "string", ""},
+        {"name missing", sceneOf({withTransform(R"("id":1,"assetId":"a")")}), "name", "", ""},
+        {"assetId not a string", sceneOf({oneEntity(one, n, "7")}), "assetId", "string", ""},
+        {"assetId is an array", sceneOf({oneEntity(one, n, R"(["a"])")}), "assetId",
+         "string", ""},
+        {"assetId missing", sceneOf({withTransform(R"("id":1,"name":"n")")}), "assetId", "", ""},
+        // -- transform shape -----------------------------------------------
+        {"transform missing", sceneOf({rawEntity(R"("id":1,"name":"n","assetId":"a")")}),
+         "transform", "", ""},
+        // An array of exactly 3 numbers would PASS the vector checks, so this
+        // is the only guard that can catch it.
+        {"transform not an object",
+         sceneOf({oneEntity(one, n, a, "[0,0,0]")}), "transform", "object", "3 components"},
+        {"2-component position",
+         sceneOf({oneEntity(one, n, a,
+                            R"({"position":[0,0],"rotation":[0,0,0],"scale":[1,1,1]})")}),
+         "position", "exactly 3 components", ""},
+        {"4-component position",
+         sceneOf({oneEntity(one, n, a,
+                            R"({"position":[0,0,0,0],"rotation":[0,0,0],"scale":[1,1,1]})")}),
+         "position", "exactly 3 components", ""},
+        {"non-numeric component",
+         sceneOf({oneEntity(one, n, a,
+                            R"({"position":["x",0,0],"rotation":[0,0,0],"scale":[1,1,1]})")}),
+         "position", "number", ""},
+        // The index must survive the nested transform path, so the failing entity
+        // is findable in a long document without counting by hand.
+        {"bad transform in the 2nd entity names its index",
+         sceneOf({oneEntity("1", n, a), oneEntity("2", n, a, R"({"position":[0,0]})")}),
+         "entities[1]", "", ""},
+        {"position missing",
+         sceneOf({oneEntity(one, n, a,
+                            R"({"rotation":[0,0,0],"scale":[1,1,1]})")}),
+         "position", "missing", ""},
+    };
+}
+
+// One pass over the table: every case must fail to load, must name its own
+// defect, must state the fix, must not borrow a neighbour's wording, and must
+// not leak raw parser text as the whole message (Q3).
+void testStructuralCasesRejected() {
+    const std::vector<StructuralCase> cases = structuralCases();
+    std::vector<std::string> seenVersion;
+    for (const auto& c : cases) {
+        const LoadResult r = noto3d::serialization::deserializeScene(c.document);
+        const std::string diag =
+            r.diagnostics.empty() ? std::string("<none>") : r.diagnostics.front();
+        char name[160];
+
+        std::snprintf(name, sizeof(name), "Q3 strict: %s -> no scene", c.label);
+        check(!r.scene.has_value(), name);
+
+        std::snprintf(name, sizeof(name), "Q3 message quality: %s -> has diagnostic", c.label);
+        check(!r.diagnostics.empty(), name);
+
+        std::snprintf(name, sizeof(name), "Q3 message quality: %s names the defect", c.label);
+        check(diag.find(c.mustMention) != std::string::npos, name);
+        if (diag.find(c.mustMention) == std::string::npos) NOTO3D_ERROR("       got: {}", diag);
+
+        if (*c.statesExpectation) {
+            std::snprintf(name, sizeof(name), "Q3 expectation stated: %s", c.label);
+            check(diag.find(c.statesExpectation) != std::string::npos, name);
+            if (diag.find(c.statesExpectation) == std::string::npos)
+                NOTO3D_ERROR("       got: {}", diag);
+        }
+        // A redundant guard would otherwise fire first and produce an equally
+        // valid-looking message, so assert the neighbour's wording is ABSENT.
+        if (*c.mustNotMention) {
+            std::snprintf(name, sizeof(name), "Q3 guard isolation: %s is not its neighbour's",
+                          c.label);
+            check(diag.find(c.mustNotMention) == std::string::npos, name);
+            if (diag.find(c.mustNotMention) != std::string::npos)
+                NOTO3D_ERROR("       got: {}", diag);
+        }
+
+        std::snprintf(name, sizeof(name), "Q3: %s is not raw parser text", c.label);
+        check(!diag.empty() && diag.rfind("scene_io: ", 0) == 0, name);
+        if (diag.find("version") != std::string::npos) seenVersion.push_back(diag);
+    }
+    // Q4: three different version mistakes, three different messages.
+    check(seenVersion.size() == 3 && seenVersion[0] != seenVersion[1] &&
+              seenVersion[1] != seenVersion[2] && seenVersion[0] != seenVersion[2],
+          "Q4: the three version diagnostics are distinct strings");
+}
+
+// An entity index in the message is what makes a large document fixable.
+void testDiagnosticIdentifiesFailingEntity() {
+    // Three good entities, then a broken fourth (missing assetId).
+    const std::string doc =
+        sceneOf({oneEntity("1", R"("a")", R"("x")"), oneEntity("2", R"("b")", R"("y")"),
+                 oneEntity("3", R"("c")", R"("z")"),
+                 withTransform(R"("id":4,"name":"d")")});
+    LoadResult r = noto3d::serialization::deserializeScene(doc);
+    check(!r.scene.has_value(), "Q3: bad 4th entity -> no scene");
+    check(!r.diagnostics.empty(), "Q3: bad 4th entity -> diagnostic");
+    if (r.diagnostics.empty()) return;
+    const std::string& diag = r.diagnostics.front();
+    check(diag.find("entities[3]") != std::string::npos,
+          "Q3: diagnostic identifies the failing entity index (entities[3])");
+    if (diag.find("entities[3]") == std::string::npos) NOTO3D_ERROR("       got: {}", diag);
+    check(diag.find("assetId") != std::string::npos,
+          "Q3: diagnostic identifies the missing field (assetId)");
+}
+
+// Lenient references: an assetId the serializer cannot resolve is NOT a defect.
+// The 0041 guard makes it structurally impossible for the serializer to consult
+// the registry, so it must retain the entity verbatim and let the M4 resolution
+// seam skip it at draw time.
+void testUnresolvableAssetIdIsRetained() {
+    const std::string doc =
+        sceneOf({oneEntity("1", R"("cube")", R"("noto_cube")",
+                            R"({"position":[1,2,3],"rotation":[0,0,0],"scale":[1,1,1]})"),
+                 oneEntity("2", R"("ghost")", R"("asset_that_does_not_exist")",
+                            R"({"position":[4,5,6],"rotation":[0,0,0],"scale":[2,2,2]})")});
+    LoadResult r = noto3d::serialization::deserializeScene(doc);
+    check(r.scene.has_value(), "Q3 lenient: unknown assetId still loads");
+    check(r.diagnostics.empty(), "Q3 lenient: unknown assetId yields no diagnostic");
+    if (!r.scene.has_value() || r.scene->entities().size() != 2) {
+        check(false, "Q3 lenient: both entities retained");
+        return;
+    }
+    const auto& kept = r.scene->entities()[1];
+    check(kept.id == 2 && kept.name == "ghost", "Q3 lenient: entity kept with its id and name");
+    check(kept.assetId == "asset_that_does_not_exist",
+          "Q3 lenient: unresolvable assetId retained VERBATIM");
+    check(kept.transform.position == glm::vec3(4.0f, 5.0f, 6.0f),
+          "Q3 lenient: retained entity keeps its transform");
+}
+
+// An EMPTY assetId is legal input, not a structural defect: present-and-a-string
+// is the only rule, so the serializer never judges resolvability -- and
+// therefore never judges emptiness either.
+void testEmptyAssetIdIsLegal() {
+    const std::string doc = sceneOf({oneEntity("1", R"("nameless")", R"("")")});
+    LoadResult r = noto3d::serialization::deserializeScene(doc);
+    check(r.scene.has_value(), "Q3 lenient: empty assetId loads successfully");
+    check(r.diagnostics.empty(), "Q3 lenient: empty assetId yields no diagnostic");
+    if (!r.scene.has_value() || r.scene->entities().empty()) {
+        check(false, "Q3 lenient: entity with empty assetId retained");
+        return;
+    }
+    check(r.scene->entities()[0].assetId.empty(),
+          "Q3 lenient: empty assetId retained as an empty string");
+}
+
+// An entity whose name is empty is equally legal -- the serializer validates
+// shape, never content it has no opinion about.
+void testEmptyNameIsLegal() {
+    const std::string doc = sceneOf({oneEntity("1", R"("")", R"("a")")});
+    LoadResult r = noto3d::serialization::deserializeScene(doc);
+    check(r.scene.has_value() && r.diagnostics.empty(),
+          "Q3 lenient: empty name loads without a diagnostic");
+}
+
+// The unresolvable entity must SURVIVE a full round-trip too, not merely the
+// load: save must not drop or "repair" a reference it cannot resolve.
+void testUnresolvableReferenceSurvivesRoundTrip() {
+    Scene scene;
+    const EntityId id = scene.createEntity("ghost", "asset_that_does_not_exist");
+    scene.findEntity(id)->transform.position = glm::vec3(7.0f, 8.0f, 9.0f);
+    const std::string text = noto3d::serialization::serializeScene(scene);
+    check(text.find("asset_that_does_not_exist") != std::string::npos,
+          "Q3 lenient: unresolvable assetId is written out, not dropped");
+    LoadResult r = noto3d::serialization::deserializeScene(text);
+    check(r.scene.has_value() && !r.scene->entities().empty() &&
+              r.scene->entities()[0].assetId == "asset_that_does_not_exist",
+          "Q3 lenient: unresolvable assetId survives the full round-trip");
+}
+
+// No half-loaded scene, whatever the defect: a document whose LAST entity is
+// broken must return nothing at all, not the valid prefix.
+void testNoHalfLoadedScene() {
+    const std::string doc =
+        sceneOf({oneEntity("1", R"("a")", R"("x")"), oneEntity("2", R"("b")", R"("y")"),
+                 rawEntity(R"("id":3,"name":"c")")});
+    LoadResult r = noto3d::serialization::deserializeScene(doc);
+    check(!r.scene.has_value(), "Q3: broken trailing entity -> no partial scene");
+    check(!r.diagnostics.empty(), "Q3: broken trailing entity -> diagnostic");
+}
+
+#undef E
+
 }  // namespace
 
 int main() {
@@ -312,12 +487,16 @@ int main() {
     testEmptyDocument();
     testUnknownKeysIgnored();
     testVersionGate();
-    testVersionDiagnosticsAreDistinct();
-    testStructuralFailureInvariants();
-    testMalformedEntityFieldsRejected();
-    testDuplicateIdsRejected();
     testDeterminism();
     testFloatExactnessWideRange();
+
+    testStructuralCasesRejected();
+    testDiagnosticIdentifiesFailingEntity();
+    testUnresolvableAssetIdIsRetained();
+    testEmptyAssetIdIsLegal();
+    testEmptyNameIsLegal();
+    testUnresolvableReferenceSurvivesRoundTrip();
+    testNoHalfLoadedScene();
 
     if (g_failures == 0) {
         NOTO3D_INFO("ALL PASS");
