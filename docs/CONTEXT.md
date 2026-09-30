@@ -437,9 +437,46 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   mutant count fell 31 → 27 with every survivor **stronger**. Suite **206 assertions**;
   **27/27 mutations, 0 vacuous**; ctest **23/23** dev + release, 0 warnings, both close matrices
   ALL PASS; headless claim re-verified.
-- 0045 (CLI `--scene=` + `--save-scene=` + atomic I/O) · 0046 (M6 close) — both `ready-for-agent`;
-  blocking chain 0041‖0042 → 0043 → 0044 → 0045 → 0046, so with 0044 now complete **0045 is
-  unblocked**
+- 0045 (CLI `--scene=` + `--save-scene=` + atomic I/O) — **complete 2026-09-30**:
+  `--scene=<path>` is the third mutually exclusive entry mode (ADR-0013 Q5), gated **pre-GL** by a
+  mode **count** rather than a pairwise chain — with three modes a pairwise chain silently misses
+  one pair — and the diagnostic names every offending flag; the registry resolver is now a single
+  shared `registryResolver()` shared by all modes, so the policy cannot drift per mode. File I/O
+  lives in a new app-layer `src/app/scene_file_io.{hpp,cpp}` (`readSceneFile`,
+  `writeSceneFileAtomic`, `saveSceneTo`, `loadSceneFrom`, `sceneNameFromPath`) — the only
+  filesystem-touching code and the only non-test consumer of `deserializeScene()`; `Editor` stays
+  I/O-free and needed **no new API**, since load uses 0042's `replaceScene(std::move(...))` and save
+  reads the existing `scene()`. Q8 atomicity: the temp file is created **in the destination
+  directory** (not `/tmp`) because `rename()` is only atomic within one filesystem, and is named
+  `"." + stem + ".tmp." + pid + "." + counter` so it is unique per process *and* per attempt; the
+  destination is opened only at `rename()`, so any earlier failure leaves the prior document intact;
+  overwrite is silent; a missing parent directory is a diagnostic + non-zero exit and **never** a
+  silent `mkdir`. Q9: a loaded scene reports its **file stem**, so `M4_INFO`/title shapes are reused
+  unchanged and the tag stays frozen at `(M4)`; `M6_INFO scene-loaded`/`scene-saved` are the only
+  new lines. ctest **27/27** dev + release (new dependency-free `app-scene-file-io`, 29 assertions, plus three
+  new CTest rows `cli-scene-*-exclusive` for the pre-GL exclusion gate), 0 warnings, both close
+  matrices ALL PASS, **12/12 mutations caught, 0 vacuous**.
+  Three defects the red run found were all in the *verification*, not the production code — the
+  most important being a **false-green row**: `--asset`+`--scene` asserted "exit 1" while pointing at
+  a **non-existent** file, so it passed because the *load* failed even with the gate deleted, i.e.
+  the gate was untested; it now uses a valid document and checks the diagnostic names all three
+  flags (verified discriminating: 1 vs 0). A `/code-review` at `41184b3` then found three more: **ADR-0013
+  Q3's "the app layer logs a warning" for an unresolvable `assetId` was unmet** (no trigger existed
+  before `--scene=`; `buildEntryScene` now warns once per id, keeping Q3's other half — kept, skipped
+  at render, load still succeeds); the **entry-mode set was duplicated** between a hand-written sum
+  and the message block (one table now drives both); and the new suite's **"no GL" claim was
+  conventional** — it links `noto3d_core`, which PUBLIC-exports glad's include dir — so it now
+  carries the same `noto3d_assert_target_reaches_no_gl()` guard as the registry/serialization suites,
+  proven to fire. Three mutants (temp staged in `/tmp`; `close()` error ignored; **loss of per-attempt
+  temp-name uniqueness**) are **recorded as known gaps rather than counted**: uniqueness had a test
+  written for it, and the review deleted it because it pinned the mutant's *text* rather than the
+  behaviour, so it passed either way. Also: the ticket's "CLI exit matrix (automated, no display)" is
+  only true of the **exclusion** rows — a load/save needs the `AssetRegistry`, whose GPU cache
+  requires a live context (ADR-0010 Q5 + 0025), so those rows need a display and belong to 0046. One deliberate deviation from the ticket text: the close matrix's existing rows keep
+  the same output and exit codes, but a static assertion that required `registry.model(` to appear
+  **exactly twice** (a count that exists only while there are two entry modes) now states the
+  *intent* — at least one call, every occurrence inside the resolver's `return`.
+- 0046 (M6 close) — **`ready-for-agent`**; unblocked by 0045
 
 ### M5 (spec embedded in ADR-0011; implemented, machine-verified, tickets archived)
 - 0028 (docked shell + `ViewportRect` + input-ownership gate) — complete, archived (headless

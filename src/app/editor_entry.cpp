@@ -2,6 +2,7 @@
 
 #include <asset_cpu.hpp>
 #include <log.hpp>
+#include <scene_file_io.hpp>
 
 #include <cstdlib>
 #include <filesystem>
@@ -25,6 +26,18 @@ const char* referenceName(const asset::AssetEntry& e) {
 }
 
 std::string manifestPath() { return std::string(NOTO3D_ASSETS_DIR) + "/manifest.json"; }
+
+// The registry-backed resolver, shared by --asset=, --scene= and the default
+// scene.  It was spelled out twice before ticket 0045 and is now spelled once:
+// three entry modes sharing one lambda is exactly the shape that drifts, and the
+// close matrix asserts the registry model lookup is reachable ONLY through a
+// resolver handed to collectDrawItems().  (--demo is the one mode that overrides it,
+// because its fixture model is loaded outside the registry.)
+Resolver registryResolver(asset::AssetRegistry& registry) {
+    return [&registry](const std::string& id) -> const renderer::Model* {
+        return registry.model(id);
+    };
+}
 
 }  // namespace
 
@@ -94,6 +107,47 @@ std::optional<EntryScene> buildEntryScene(const Options& opts, asset::AssetRegis
         };
         entry.windowTitle = entry.sceneName + " [placeholder] | " + kTitleSuffix;
 
+    } else if (opts.scenePath) {
+        // ADR-0013 Q5/Q9: --scene= is the third entry mode.  Load is STRICT on
+        // structure (0044's diagnostics, re-emitted by loadSceneFrom) and LENIENT
+        // on references: an unknown assetId is kept as pure data and skipped by
+        // collectDrawItems at draw time, which is why the resolver below is the
+        // ordinary registry-backed one rather than a scene-specific map.
+        // NOT const: the scene is MOVED into the editor below, and a const
+        // result would silently turn that move into a full Scene copy.
+        serialization::LoadResult loaded = loadSceneFrom(*opts.scenePath);
+        if (!loaded.scene) {
+            // loadSceneFrom already re-emitted 0044's diagnostic taxonomy
+            // verbatim; a second line here would only repeat the path and bury
+            // the actual defect.
+            return std::nullopt;
+        }
+        // Q6: the ONLY way into the editor is replaceScene() BY VALUE, so the
+        // entity set and the derived allocator cross together and the app never
+        // obtains a mutable Scene&/Entity*.
+        entry.editor.replaceScene(std::move(*loaded.scene));
+        NOTO3D_INFO("M6_INFO scene-loaded path='{}' entities={}", *opts.scenePath,
+                    static_cast<int>(entry.editor.entityCount()));
+        // Q9: the FILE STEM is the scene identity, so the frozen M4_INFO line and
+        // the window title below are reused unchanged rather than paralleled.
+        entry.sceneName  = sceneNameFromPath(*opts.scenePath);
+        entry.resolve = registryResolver(registry);
+        entry.windowTitle = entry.sceneName + " | " + kTitleSuffix;
+
+        // ADR-0013 Q3: a semantic problem does NOT fail the load -- the id is kept
+        // as pure data and collectDrawItems skips it at draw time (ADR-0010 Q5) --
+        // but the app layer must WARN.  That half was missing: before --scene=
+        // every Scene was built from a fixture whose ids were known-good, so
+        // nothing could reach this state and the warning had no trigger.  Warned
+        // ONCE per id here rather than per frame in the draw path.
+        for (const scene::Entity& e : entry.editor.scene().entities()) {
+            if (!entry.resolve(e.assetId)) {
+                NOTO3D_WARN("M6_WARN unresolved asset '{}' referenced by entity '{}' in '{}': "
+                            "kept, and skipped at render",
+                            e.assetId, e.name, entry.sceneName);
+            }
+        }
+
     } else if (opts.assetId) {
         // Single-entity Scene from --asset=<id>; M3 identity line kept (0017).
         const asset::AssetEntry* entryPtr = registry.findEntry(*opts.assetId);
@@ -105,9 +159,7 @@ std::optional<EntryScene> buildEntryScene(const Options& opts, asset::AssetRegis
                     entryPtr->id, geometrySourceName(*entryPtr), referenceName(*entryPtr));
         entry.editor.createEntity(entryPtr->id, entryPtr->id);  // identity transform
         entry.sceneName = entryPtr->id;
-        entry.resolve = [&registry](const std::string& id) -> const renderer::Model* {
-            return registry.model(id);
-        };
+        entry.resolve = registryResolver(registry);
         entry.windowTitle =
             entry.sceneName + " [" + geometrySourceName(*entryPtr) + "] | " + kTitleSuffix;
 
@@ -120,9 +172,7 @@ std::optional<EntryScene> buildEntryScene(const Options& opts, asset::AssetRegis
         addAt("smile",     -1.5f);
         addAt("crown",      0.0f);
         addAt("sunglasses", 1.5f);
-        entry.resolve = [&registry](const std::string& id) -> const renderer::Model* {
-            return registry.model(id);
-        };
+        entry.resolve = registryResolver(registry);
         entry.sceneName  = "m4_vertical_scene";
         entry.windowTitle = entry.sceneName + " | " + kTitleSuffix;
     }

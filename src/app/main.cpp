@@ -15,6 +15,7 @@
 #include <log.hpp>
 #include <renderer.hpp>
 #include <scene.hpp>
+#include <scene_file_io.hpp>
 #include <shader_program.hpp>
 #include <viewport_state.hpp>
 
@@ -22,6 +23,10 @@
 #include <editor_shell.hpp>
 #include <imgui_harness.hpp>
 #include <panel_render.hpp>
+
+#include <string>
+#include <utility>
+#include <vector>
 #include <window_input.hpp>
 
 #include <cstdlib>
@@ -104,6 +109,24 @@ int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
     auto entry = noto3d::app::buildEntryScene(opts, registry);
     if (!entry) {
         return EXIT_FAILURE;  // diagnostic already logged
+    }
+
+    // ---- M6 — --save-scene= output (ADR-0013 Q7/Q8) ------------------------
+    // Written ONCE, after the entry scene is built and BEFORE the frame loop, so
+    // the document is exactly what the run started from.  It is an OUTPUT option,
+    // not an entry mode, so it combines with --asset/--demo/--scene and with the
+    // default (which is what makes "--demo --save-scene=out.scene" work).
+    // Q6: no new Editor API — Editor::scene() already returns const Scene&.
+    if (opts.saveScenePath) {
+        // writeSceneFileAtomic() already logged the exact path and reason, so
+        // there is nothing to add here: re-logging produced two M6_FAIL lines for
+        // one failure, the second of which named only the destination and dropped
+        // the cause.
+        if (!noto3d::app::saveSceneTo(*opts.saveScenePath, entry->editor.scene())) {
+            return EXIT_FAILURE;
+        }
+        NOTO3D_INFO("M6_INFO scene-saved  path='{}' entities={}", *opts.saveScenePath,
+                    static_cast<int>(entry->editor.entityCount()));
     }
 
     // Asset-picker per-selection state (ADR-0011 Q7): a VALUE snapshot rebuilt
@@ -275,10 +298,31 @@ int main(int argc, char** argv) {
     if (opts.listAssets) {
         return noto3d::app::runListAssetsCommand();
     }
-    // --asset and --demo are mutually exclusive; reject pre-GL so the
-    // regression test (ticket 0024) can verify exit 1 without a display.
-    if (opts.assetId && opts.demo) {
-        NOTO3D_CRITICAL("M4_FAIL: --asset and --demo are mutually exclusive");
+    // The entry modes are mutually exclusive (ADR-0013 Q5): --asset, --demo and
+    // --scene.  Rejected pre-GL so the regression matrices can verify exit 1 with
+    // no display.
+    //
+    // ONE table drives both the count and the message.  An earlier version spelled
+    // the count out as a sum of three conditionals and then repeated the same three
+    // flags in a second block to build the message; that is two copies of the mode
+    // set, and adding a fourth mode would have had to be remembered twice -- with
+    // nothing catching a miss, so the new mode would silently vanish from the
+    // diagnostic while still being counted.
+    const std::vector<std::pair<const char*, bool>> entryModes{
+        {"--asset", opts.assetId.has_value()},
+        {"--demo", opts.demo},
+        {"--scene", opts.scenePath.has_value()},
+    };
+    int         modeCount = 0;
+    std::string given;
+    for (const auto& [flag, active] : entryModes) {
+        if (!active) continue;
+        if (modeCount > 0) given += " and ";
+        given += flag;
+        ++modeCount;
+    }
+    if (modeCount > 1) {
+        NOTO3D_CRITICAL("M6_FAIL: {} are mutually exclusive entry modes", given);
         return EXIT_FAILURE;
     }
     return run(opts);

@@ -16,6 +16,13 @@ struct Options {
     std::optional<std::string> assetId;           // --asset=<id> (manifest asset)
     bool                       demo       = false; // --demo (demo_checker fixture)
     bool                       listAssets = false; // --list-assets (pre-GL diagnostic)
+    // ADR-0013 Q5: --scene= is the THIRD mutually exclusive entry mode.  The
+    // exclusion is still not decided here — main() owns it, pre-GL, exactly as
+    // it owns --asset + --demo (ticket 0025's pure-syntax rule).
+    std::optional<std::string> scenePath;         // --scene=<path>
+    // ADR-0013 Q7: an OUTPUT option, deliberately NOT part of the entry-mode
+    // set, so it combines with any mode (and with the default).
+    std::optional<std::string> saveScenePath;     // --save-scene=<path>
 };
 
 // Parses argv into `out`. Returns false on invalid input, after logging a

@@ -680,6 +680,27 @@ noto3d_set_warnings(noto3d-cli-options-tests)
 noto3d_apply_sanitizers(noto3d-cli-options-tests)
 add_test(NAME app-cli-parse-contract COMMAND noto3d-cli-options-tests)
 
+# Ticket 0045 — the app-layer scene file I/O seam (ADR-0013 Q6/Q8).  It wraps the
+# PURE noto3d_serialization functions plus noto3d_core's log facade, and it is
+# genuinely file-touching (that is the point: atomicity
+# and overwrite are filesystem claims).  Every case works inside a unique temp
+# directory it removes on scope exit.
+add_executable(noto3d-scene-file-io-tests
+    tests/app/scene_file_io_test.cpp
+    src/app/scene_file_io.cpp)
+target_include_directories(noto3d-scene-file-io-tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/app)
+target_link_libraries(noto3d-scene-file-io-tests
+    PRIVATE noto3d_serialization noto3d_core)
+noto3d_set_warnings(noto3d-scene-file-io-tests)
+noto3d_apply_sanitizers(noto3d-scene-file-io-tests)
+# It links noto3d_core ONLY for the NOTO3D_* log facade, and noto3d_core
+# PUBLIC-exports glad's include directory -- so "no GL here" needs the same
+# machine check the registry/serialization suites get, not a comment.
+noto3d_assert_target_reaches_no_gl(noto3d-scene-file-io-tests
+    "tests/app/scene_file_io_test.cpp must not reach GL: the I/O seam is pure filesystem + serialization (ADR-0013 Q6/Q11)")
+add_test(NAME app-scene-file-io COMMAND noto3d-scene-file-io-tests)
+
 # ---------------------------------------------------------------------------
 # UI adaptation layer (ADR-0008 reserves src/ui; ADR-0011: presentation and
 # input adaptation only — no editor or scene logic lives here)
@@ -710,9 +731,15 @@ noto3d_apply_sanitizers(noto3d_ui)
 # ---------------------------------------------------------------------------
 add_executable(noto3d-editor
     src/app/main.cpp
-    src/app/editor_entry.cpp)
+    src/app/editor_entry.cpp
+    src/app/scene_file_io.cpp)
+# noto3d_serialization is linked by ticket 0045 for the --scene= entry mode and
+# --save-scene= output (ADR-0013 Q5/Q7): the app layer owns the file I/O, so the
+# executable is where the PURE serializer is consumed (it cannot be reached from
+# noto3d_app without adding the edge there, which nothing in 0045 needs).
 target_link_libraries(noto3d-editor PRIVATE
-    glfw glad glm::glm imgui noto3d_ui noto3d_app noto3d_asset)
+    glfw glad glm::glm imgui noto3d_ui noto3d_app noto3d_asset
+    noto3d_serialization)
 target_compile_definitions(noto3d-editor PRIVATE
     NOTO3D_DEBUG_GL=$<BOOL:${NOTO3D_DEBUG_GL}>
     NOTO3D_SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders"
@@ -762,3 +789,32 @@ set_tests_properties(cli-asset-empty PROPERTIES WILL_FAIL TRUE)
 add_test(NAME cli-asset-demo-exclusive
     COMMAND $<TARGET_FILE:noto3d-editor> --asset=smile --demo)
 set_tests_properties(cli-asset-demo-exclusive PROPERTIES WILL_FAIL TRUE)
+
+# ---------------------------------------------------------------------------
+# Ticket 0045 (ADR-0013 Q5): --scene= is the THIRD mutually exclusive entry mode.
+#
+# These rows point at a VALID v1 document on purpose.  An earlier version of this
+# check used a non-existent path, which made every row pass for the wrong reason:
+# with the exclusion gate deleted the run still exited 1, because the LOAD then
+# failed instead.  The gate is pre-GL while the load is post-GL (an entry Scene
+# needs the AssetRegistry, whose GPU cache requires a live context -- ADR-0010 Q5
+# and 0025's lifetime rule), so a valid document is exactly what lets these rows
+# distinguish "the gate fired" from "something else failed".
+set(NOTO3D_CLI_FIXTURES "${CMAKE_BINARY_DIR}/cli-fixtures")
+file(WRITE "${NOTO3D_CLI_FIXTURES}/valid.scene"
+"{\"version\":1,\"entities\":[{\"id\":1,\"name\":\"e1\",\"assetId\":\"smile\",\"transform\":{\"position\":[0,0,0],\"rotation\":[0,0,0],\"scale\":[1,1,1]}}]}\n")
+
+add_test(NAME cli-scene-asset-exclusive
+    COMMAND $<TARGET_FILE:noto3d-editor> --asset=smile
+            "--scene=${NOTO3D_CLI_FIXTURES}/valid.scene")
+set_tests_properties(cli-scene-asset-exclusive PROPERTIES WILL_FAIL TRUE)
+
+add_test(NAME cli-scene-demo-exclusive
+    COMMAND $<TARGET_FILE:noto3d-editor> --demo
+            "--scene=${NOTO3D_CLI_FIXTURES}/valid.scene")
+set_tests_properties(cli-scene-demo-exclusive PROPERTIES WILL_FAIL TRUE)
+
+add_test(NAME cli-scene-asset-demo-exclusive
+    COMMAND $<TARGET_FILE:noto3d-editor> --asset=smile --demo
+            "--scene=${NOTO3D_CLI_FIXTURES}/valid.scene")
+set_tests_properties(cli-scene-asset-demo-exclusive PROPERTIES WILL_FAIL TRUE)

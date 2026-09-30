@@ -146,6 +146,44 @@ int main() {
               "repeated --asset: last occurrence wins");
     }
 
+    // ── Test 13: --scene=<path> parsed (ticket 0045, ADR-0013 Q5) ────────────
+    {
+        Options o;
+        check(parse({"--scene=/tmp/a.scene"}, o), "--scene=/tmp/a.scene: parse succeeds");
+        check(o.scenePath.has_value() && *o.scenePath == "/tmp/a.scene",
+              "--scene= : path captured verbatim");
+    }
+
+    // ── Test 14: empty --scene= rejected (same rule as --asset=) ─────────────
+    {
+        Options o;
+        check(!parse({"--scene="}, o), "--scene= (empty path): rejected");
+    }
+
+    // ── Test 15: --save-scene=<path> parsed, and it is an OUTPUT option ──────
+    {
+        Options o;
+        check(parse({"--save-scene=out.scene"}, o), "--save-scene=out.scene: parse succeeds");
+        check(o.saveScenePath.has_value() && *o.saveScenePath == "out.scene",
+              "--save-scene= : path captured verbatim");
+        // Q7: --save-scene= is orthogonal to the entry-mode set, so the parser
+        // must accept it together with any mode and must NOT decide exclusion.
+        check(parse({"--demo", "--save-scene=out.scene"}, o),
+              "--save-scene= combines with --demo (parser does not gate exclusion)");
+        check(parse({"--asset=smile", "--scene=a.scene", "--save-scene=out.scene"}, o),
+              "--save-scene= combines with --scene= (parser does not gate exclusion)");
+        Options e;
+        check(!parse({"--save-scene="}, e), "--save-scene= (empty path): rejected");
+    }
+
+    // ── Test 16: unset by default (additive, user story 7) ───────────────────
+    {
+        Options o;
+        check(parse({}, o), "no arguments: parse succeeds");
+        check(!o.scenePath.has_value(), "default: scenePath unset");
+        check(!o.saveScenePath.has_value(), "default: saveScenePath unset");
+    }
+
     if (g_failures == 0) { NOTO3D_INFO("ALL PASS"); return EXIT_SUCCESS; }
     NOTO3D_ERROR("{} FAILURE(S)", g_failures);
     return EXIT_FAILURE;

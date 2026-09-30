@@ -122,8 +122,18 @@ done
 echo "── tier A: static contract checks ────────────────────────────────────────"
 # Single resolution seam: collectDrawItems is the only render-path entry; the
 # only registry.model() uses are the resolver lambdas passed to it.
+# The registry-lookup half was `-eq 2` until ticket 0045, which counts RESOLVER
+# LAMBDAS rather than the invariant: the intent is "the registry model lookup is
+# reachable only through a resolver handed to collectDrawItems", so that stays
+# true whatever the entry-mode count is.  0045 could not honour the ticket's
+# "existing rows unchanged" here -- adding a third entry mode is exactly what
+# invalidates a literal 2.  The check is now: at least one lookup exists (or the
+# assertion would be vacuous), and EVERY one of them is the resolver's return
+# statement, so none has crept into a render path.
 if [ "$(grep -rl "collectDrawItems(" src/app/*.cpp | wc -l)" -ge 1 ] && \
-   [ "$(grep -rn "registry.model(" src/app/editor_entry.cpp | wc -l)" -eq 2 ]; then
+   [ "$(grep -c "registry.model(" src/app/editor_entry.cpp)" -ge 1 ] && \
+   [ "$(grep -n "registry.model(" src/app/editor_entry.cpp \
+        | grep -vc "return registry.model(")" -eq 0 ]; then
     check "seam: collectDrawItems sole render entry + resolver-only registry.model calls" pass
 else
     check "seam: collectDrawItems sole render entry + resolver-only registry.model calls" fail

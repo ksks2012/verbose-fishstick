@@ -36,6 +36,22 @@ bool parseOptions(int argc, char** argv, Options& out) {
                 return false;
             }
             out.assetId = id;
+        } else if (std::strncmp(arg, "--scene=", 8) == 0) {
+            // Same empty-value rule as --asset= (ticket 0045): a bare --scene=
+            // names no file, so it is a usage error rather than a load failure.
+            const char* path = arg + 8;
+            if (*path == '\0') {
+                NOTO3D_CRITICAL("--scene= requires a non-empty file path");
+                return false;
+            }
+            out.scenePath = path;
+        } else if (std::strncmp(arg, "--save-scene=", 13) == 0) {
+            const char* path = arg + 13;
+            if (*path == '\0') {
+                NOTO3D_CRITICAL("--save-scene= requires a non-empty file path");
+                return false;
+            }
+            out.saveScenePath = path;
         } else if (std::strcmp(arg, "--demo") == 0) {
             out.demo = true;
         } else if (std::strcmp(arg, "--list-assets") == 0) {
