@@ -551,6 +551,27 @@ unset(_lib)
 noto3d_assert_target_reaches_no_gl(noto3d_serialization
     "the serialization library" POLICY closed)
 
+# Ticket 0043 — the v1 round-trip contract (ADR-0013 Q2/Q4/Q10, Q1 reuse).
+# The suite is string-based by design (no file I/O, no CLI), so it needs no
+# display, no GL context and no files — PRD "Testing Decisions", user story 9.
+# noto3d_core is a TEST-ONLY dependency, the same trade noto3d-registry-tests
+# makes: the suite uses the project log facade (log.hpp).  It does link glad's
+# PUBLIC include dir, which is why the arch guard below probes the include
+# CLOSURE rather than trusting the link line — the guard is what keeps the
+# "no GL" claim structural instead of conventional.
+add_executable(noto3d-serialization-tests tests/serialization/scene_io_test.cpp)
+target_link_libraries(noto3d-serialization-tests
+    PRIVATE noto3d_serialization noto3d_core)
+noto3d_set_warnings(noto3d-serialization-tests)
+noto3d_apply_sanitizers(noto3d-serialization-tests)
+add_test(NAME serialization-scene-round-trip COMMAND noto3d-serialization-tests)
+
+# Architecture guard — enforced at configure time (ADR-0013 Q11).
+# The round-trip suite must reach no GL header either; see the note above the
+# noto3d-registry-tests guard for why the link line alone is not enough.
+noto3d_assert_target_reaches_no_gl(noto3d-serialization-tests
+    "the serialization round-trip suite" POLICY closed)
+
 # ---------------------------------------------------------------------------
 # Application library (ADR-0008/0010): app-layer orchestration, no GL state
 # ---------------------------------------------------------------------------

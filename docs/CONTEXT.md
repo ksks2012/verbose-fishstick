@@ -385,10 +385,40 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   Scene suite `check()` 29 → 46, editor suite 62 → 76 plus 2 `static_assert`s; ctest 22/22 dev +
   release, both close matrices ALL PASS. This change also amends the M4 `EntityId` line below,
   which stated "never reused" flatly and so contradicted the pinned Q1 reuse.
-- 0043 (v1 round-trip happy path) · 0044 (strict structure / lenient references) · 0045 (CLI
-  `--scene=` + `--save-scene=` + atomic I/O) · 0046 (M6 close) — all `ready-for-agent`; blocking
-  chain 0041‖0042 → 0043 → 0044 → 0045 → 0046, and with both 0041 and 0042 now complete,
-  **0043 is unblocked**
+- 0043 (v1 round-trip happy path) — **complete 2026-09-30**:
+  `serializeScene(const scene::Scene&)` / `deserializeScene(std::string_view)` and the frozen
+  `LoadResult { std::optional<scene::Scene> scene; std::vector<std::string> diagnostics; }`
+  vocabulary in `src/serialization/scene_io.{hpp,cpp}` — the **serialization-local** Result type
+  ADR-0013 Q11 requires (the shared one lives in `noto3d_asset_cpu`, which the guard forbids
+  reaching). Document shape is Q2 verbatim: `{"version":1,"entities":[…]}`, one entity per line,
+  `entities[]` in creation order, `transform` vectors `[x,y,z]`, rotation in **radians YXZ**, and
+  the allocator/selection/camera/viewport absent by construction (no code path could write them).
+  `nlohmann::ordered_json` is used over the default `json` so key order is insertion order and the
+  output matches the frozen shape rather than `json`'s alphabetical order. Round-trip float
+  exactness is nlohmann's shortest-round-trip dump, asserted with **`==`, not a tolerance**, across
+  the full range (`1e-45f` denormal, `±FLT_MAX`, `1/3`) — plus `-0.0f` via `std::signbit`, the one
+  value `==` cannot pin since `-0.0f == 0.0f`.
+  **Duplicate and `id == 0` rejection is implemented HERE, not deferred to 0044**, because 0042's
+  `fromEntities` asserts uniqueness as a *debug-only* precondition: a duplicate-id document
+  **aborts the process** (verified `SIGABRT`), which would break 0043's own "never throws, never
+  partially-populated" contract. The serializer must never hand `fromEntities` data it cannot
+  accept. `id` is read as `int64` **before** narrowing, since `EntityId` is `uint32_t` and a
+  negative id would otherwise wrap to a huge unsigned value. 0044 still owns the diagnostic taxonomy
+  and the unresolvable-reference contract. The version gate emits **three distinct** diagnostics
+  (missing / malformed / unsupported) as ADR-0013 Q4 requires. 20 mutations run as a red-green
+  proof, **0 vacuous**, five of them caught by *abort* — those five are what prove the no-throw
+  contract is load-bearing rather than decorative. Two defects found by the red run itself:
+  `readTransform` was handed the entity object instead of the nested `transform` object (7
+  assertions failed on documents the serializer had just written), and `!size() == 3` was a
+  no-op guard that would have read `a[2]` out of bounds on a length-2 vector. Review found the new
+  CMake comment claiming the suite avoids `noto3d_core` while the link line pulls it in (fixed), and
+  the version-diagnostic conflation above (fixed). Suite **81 assertions**; ctest **23/23** dev +
+  release (22 → 23), clean builds 0 warnings, both close matrices ALL PASS. Headless claim verified
+  rather than assumed: no GL/GLFW/X11 on the link line, passes with `DISPLAY` unset, no
+  `.scene`/`.json` opened under `strace`.
+- 0044 (strict structure / lenient references) · 0045 (CLI `--scene=` + `--save-scene=` + atomic
+  I/O) · 0046 (M6 close) — all `ready-for-agent`; blocking chain 0041‖0042 → 0043 → 0044 → 0045
+  → 0046, so with 0043 now complete **0044 is unblocked**
 
 ### M5 (spec embedded in ADR-0011; implemented, machine-verified, tickets archived)
 - 0028 (docked shell + `ViewportRect` + input-ownership gate) — complete, archived (headless
