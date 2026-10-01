@@ -1,9 +1,55 @@
 # CHANGELOG
 
-## [Unreleased] — M5 ImGui Editor (complete; 0028–0034 archived; four manual smoke items open in 0033)
+## [Unreleased] — M6 Save/Load (complete; 0041–0046 archived; two manual boxes open as an environment limitation)
+
+### M6 — implemented and closed (0041–0046)
+- **0046 — M6 close: integration/regression matrix, two-tier evidence, archiving.** The milestone
+  closes on a new `scripts/m6-close-matrix.sh` (**71 checks, ALL PASS in dev and release**) with
+  `scripts/m5-close-matrix.sh` left **byte-for-byte unmodified** and still ALL PASS — the ticket
+  locked "a new script, not a grown M5 script", so "the pre-existing rows are unchanged" is
+  verified by running both, not by reading a diff of a monolith. ctest **34/34** dev + release
+  (27 → 34: one row per `--scene=` structural-failure case plus `--save-scene=` empty), 0 warnings.
+- **The load moved PRE-GL**, which is what let the ticket's "no display required for any row" hold
+  literally instead of being reinterpreted. `main()` reads and deserializes the document before
+  GLFW is initialised and threads the result in as a separate `std::optional<scene::Scene>`
+  argument rather than through `Options` (0025 froze `Options` as pure syntax; a deserialized Scene
+  is runtime state). **This retracts a false constraint recorded in 0045** — that the load had to be
+  post-GL "because an entry Scene needs the `AssetRegistry`, whose GPU cache requires a live
+  context". `Scene` is pure data; the registry is only needed later to *resolve* assets into
+  `DrawItem`s. The corrected rule is **load pre-GL, resolve post-GL**, and the stale claim in a
+  `CMakeLists.txt` comment was corrected rather than left to mislead.
+- **TDD at the seam removed a false-green assertion that predated this milestone**: the
+  round-trip's "transform survives" check asserted `position.y == 0.0f`, which is also what a
+  default-constructed transform holds — a writer that dropped every transform would have passed it.
+  It is now a non-identity position/rotation/scale asserted exactly, plus a save→reload→save
+  byte-identity check; red was proven by mutating the serializer to drop the position.
+- **`/code-review` found a bug no row could see**: `buildEntryScene` ignored its own
+  `preloadedScene` parameter and re-read the file post-GL — the exact behaviour 0046 exists to
+  remove — and **every matrix row still passed**, because re-reading a *valid* document is
+  indistinguishable from having preloaded it. The root cause was the **fallback branch** around the
+  parameter: it reads as defensive programming, but it is where a broken preload hides, because it
+  turns the failure mode into a success. It is removed; the parameter is required (no default) and
+  the branch now fails loudly with an explicit "this is a bug, not a bad document" diagnostic. Two
+  matrix rows assert the **mechanism**, not the output.
+- **Nine injected defects each fail the matrix for their own reason** (load moved post-GL, the
+  exclusion gate disabled, `M4_INFO` identity changed from stem to full path, the `(M4)` tag
+  drifting, `<filesystem>` added to `editor.cpp`, a `gl*` symbol defined in the serializer, a
+  dropped transform). The 0041 arch guard is re-confirmed **and proven to still fire**: an injected
+  `renderer` include aborts configure, and an injected `gl*` symbol makes the symbol check report 1.
+- **One ticket number did not hold and is amended in the ticket, not quietly restated**: the
+  invariant "CTest count rises from 22" was already stale — 0045 had moved it to 27 before M6 work
+  began. Recorded in the archived ticket's *Delivered* section.
+- **Manual tier NOT claimed.** Opening a saved document in a real window and the `xprop` `WM_NAME`
+  titles for a `--scene=` run need a window session this environment does not have; both are
+  recorded as an environment limitation, per 0033's discipline. Summary:
+  `docs/summary/0046-m6-save-load-close.md`.
+- **0041–0045** (arch guard, `Scene::fromEntities` + `Editor::replaceScene`, the serializer
+  round-trip, strict-structure/lenient-reference load policy, CLI `--scene=`/`--save-scene=` with
+  app-layer atomic I/O) are complete and archived; the target graph gained one edge
+  (`noto3d-editor → noto3d_serialization`) and no existing edge changed.
 
 ### Architecture — M6 Save/Load (grilling → ADR-0013)
-- **ADR-0013 locked; M6 execution tickets not yet written.** A grilling session (Q0–Q11) settled the
+- **ADR-0013 locked; executed by 0041–0046, all complete and archived.** A grilling session (Q0–Q11) settled the
   milestone before the first ticket could decide any of it by accident. M6 is a **persistence core +
   CLI round-trip**, not an in-editor document editor — `lib/` has no file-dialog library, and ADR-0003
   constrains new dependencies, so the UI affordances (file menu, picker, dirty state, Save-vs-Save-As)

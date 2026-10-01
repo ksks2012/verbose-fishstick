@@ -189,6 +189,75 @@ int main() {
         }
     }
 
+    // ── Test 6c: the round-trip preserves a NON-IDENTITY transform (Q7/Q9) ────
+    // The seam's ticket promise is "entities AND TRANSFORMS match".  Test 6
+    // above cannot carry that claim: it asserts position.y == 0.0f, and 0 is
+    // also what a default-constructed transform holds, so a writer that dropped
+    // every transform would still pass it.  An assertion that cannot fail is
+    // not evidence, so the round-trip is re-asserted here through the M6 restore
+    // entry (Scene::fromEntities) with values no default could produce.
+    {
+        TempDir dir;
+        const std::string path = dir.file("xform.scene");
+
+        std::vector<scene::Entity> ents;
+        {
+            scene::Entity e;
+            e.id = 4;   // a non-1 id, so id preservation is asserted too
+            e.name = "moved";
+            e.assetId = "crown";
+            e.transform.position  = {1.5f, -2.25f, 3.0f};
+            e.transform.rotation  = {0.25f, 0.5f, -0.75f};
+            e.transform.scale     = {2.0f, 2.0f, 2.0f};
+            ents.push_back(e);
+        }
+        scene::Scene s = scene::Scene::fromEntities(ents);
+        check(saveSceneTo(path, s), "xform round-trip: saveSceneTo succeeds");
+
+        const auto loaded = loadSceneFrom(path);
+        check(loaded.scene.has_value(), "xform round-trip: the document reloads");
+        check(loaded.diagnostics.empty(),
+              "xform round-trip: no diagnostics (a retained unknown id is not one)");
+        if (loaded.scene && loaded.scene->entities().size() == 1) {
+            const scene::Entity& e = loaded.scene->entities()[0];
+            check(e.id == 4, "xform round-trip: the entity id survives");
+            check(e.name == "moved", "xform round-trip: the name survives");
+            check(e.transform.position == glm::vec3(1.5f, -2.25f, 3.0f),
+                  "xform round-trip: POSITION survives (not defaulted)");
+            check(e.transform.rotation == glm::vec3(0.25f, 0.5f, -0.75f),
+                  "xform round-trip: ROTATION survives (not defaulted)");
+            check(e.transform.scale == glm::vec3(2.0f, 2.0f, 2.0f),
+                  "xform round-trip: SCALE survives (not defaulted)");
+        }
+    }
+
+    // ── Test 6c-bis: the WRITER is idempotent (save -> reload -> save) ──────
+    // The matrix asserts this through two CLI runs; the same property is worth
+    // pinning at the seam, because a writer whose output re-parsed to a
+    // different Scene would make every round-trip row pass while quietly
+    // mutating the document on each pass.
+    {
+        TempDir dir;
+        const std::string a = dir.file("idem-a.scene");
+        const std::string b = dir.file("idem-b.scene");
+
+        scene::Scene s;
+        s.createEntity("one", "smile");
+        s.createEntity("two", "crown");
+        check(saveSceneTo(a, s), "idempotence: first save");
+
+        const auto mid = loadSceneFrom(a);
+        check(mid.scene.has_value(), "idempotence: the first save reloads");
+        if (mid.scene) {
+            check(saveSceneTo(b, *mid.scene), "idempotence: second save");
+            std::string ta, tb;
+            check(readSceneFile(a, ta) && readSceneFile(b, tb),
+                  "idempotence: both documents are readable");
+            check(ta == tb,
+                  "idempotence: re-saving a reloaded document is byte-identical");
+        }
+    }
+
     // ── Test 6d: an EMPTY entities[] document is valid (Q10) ────────────────
     // Q10: "{"version":1,"entities":[]} is a valid document".  This suite already
     // WRITES that shape, so loading it is the untested half -- and it is the half

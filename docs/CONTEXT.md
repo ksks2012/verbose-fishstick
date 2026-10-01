@@ -49,8 +49,8 @@ archived at `docs/archive/ticket/` (all 36, after the 0036–0039 chain closed 2
 - 0010 done: all six Git deps pinned by immutable SHA (each resolves to its release tag);
   no archive sources → `URL_HASH` n/a; dev + release configure/build + `ctest` green.
 
-Next on the roadmap: **M6 Save/Load** — architecture **locked in ADR-0013** (grilling Q0–Q11,
-2026-09-29; execution tickets not yet written). Its shape: a headless `noto3d::serialization` layer
+**M6 Save/Load is delivered and closed** (architecture locked in ADR-0013, grilling Q0–Q11,
+2026-09-29; executed by 0041–0046, all archived). Its shape: a headless `noto3d::serialization` layer
 (lives in `src/serialization/`, reserved and empty since ADR-0008) that projects `Scene` to/from a
 single versioned `.scene` JSON document, with **no** new dependency and **no** in-editor file menu,
 file picker, dirty state, or Save-vs-Save-As. `--scene=<path>` is a **third mutually exclusive entry
@@ -88,12 +88,12 @@ in-progress on its four manual-smoke boxes; **0040 is the ADR-0012 close-out res
 invariants the ADR states but nothing asserts; code-quality, does not block M6**; 0027 is
 **complete and archived — decided in ADR-0012**, its implementation 0036–0039 is **complete and
 archived — closed 2026-09-29**), plus the **M6 execution chain 0041–0046 (spec embedded in
-ADR-0013)**: 0041 `noto3d_serialization` target + proven-fires arch guard · 0042 `Scene` restore
+ADR-0013) — all six complete and archived, M6 closed 2026-10-01**: 0041 `noto3d_serialization` target + proven-fires arch guard · 0042 `Scene` restore
 primitive + `Editor::replaceScene` · 0043 serialize/deserialize happy-path round-trip · 0044
 strict-structure/lenient-reference load policy · 0045 CLI `--scene=` entry + `--save-scene=` output
 + atomic file I/O · 0046 M6 close (matrix, two-tier evidence, archiving). Blocking chain: 0041 and
 0042 are independent (parallel); 0043 needs 0041+0042; 0044 needs 0043; 0045 needs 0043+0044;
-0046 needs 0045, plus
+0046 needed 0045; plus
 0020–0025, 0027 (the ADR-0012 spike record), 0028–0034 and 0036–0039 archived under accepted ADRs.
 M0 scope, user stories and acceptance matrix: `docs/archive/ticket/0001-build-environment-spec.md`
 (checklists and item-level status live in tickets, not in ADRs).
@@ -476,7 +476,44 @@ M5 ImGui Editor → M6 Save/Load. Three parallel tracks: Infrastructure / Asset 
   the same output and exit codes, but a static assertion that required `registry.model(` to appear
   **exactly twice** (a count that exists only while there are two entry modes) now states the
   *intent* — at least one call, every occurrence inside the resolver's `return`.
-- 0046 (M6 close) — **`ready-for-agent`**; unblocked by 0045
+- 0046 (M6 close: matrix + two-tier evidence + archiving) — **complete 2026-10-01**; the whole
+  chain 0041–0046 is now **archived** and **M6 is closed**. The ticket's headline requirement —
+  "no display required for any row" — was met by moving the `--scene=` load **pre-GL**:
+  `main()` now reads and deserializes the document before GLFW is initialised and threads the
+  result in as a separate `std::optional<scene::Scene>` argument, *not* through `Options` (which
+  0025 froze as pure syntax; a deserialized Scene is runtime state, and folding it in would have
+  made a parseable struct carry a live object graph). This **retracts a false constraint 0045
+  recorded** — that the load must be post-GL because "an entry Scene needs the `AssetRegistry`,
+  whose GPU cache requires a live context". That was wrong: `Scene` is pure data, and the registry
+  is only needed later to *resolve* assets into `DrawItem`s. The corrected split is **load pre-GL,
+  resolve post-GL**, and the stale claim in the `CMakeLists.txt` comment was fixed in place.
+  Consequently **every structural failure is now a pre-GL exit 1** (missing file, malformed JSON,
+  `version != 1`, missing/mistyped field, short transform vector) — asserted both as
+  `no M0_OK context` in the matrix and as one CTest row per defect case.
+  New `scripts/m6-close-matrix.sh`: **71 checks, ALL PASS dev + release**; `scripts/m5-close-matrix.sh`
+  is **byte-for-byte unmodified** and ALL PASS, which is what makes "the pre-existing rows are
+  unchanged" cheap to verify. ctest **34/34** dev + release (27 → 34; 0045 had already moved the
+  count off the 22 this ticket was drafted against, so that number was stale before M6 started).
+  0 warnings. The arch guard from 0041 is re-confirmed **and proven to still fire** (an injected
+  `renderer` include aborts configure; an injected `gl*` symbol makes the symbol check report 1).
+  TDD at the seam caught a **false-green assertion that predated this ticket**: the round-trip's
+  "transform survives" check asserted `position.y == 0.0f`, and 0 is also what a default
+  transform holds, so a writer dropping every transform would have passed; it is now a
+  non-identity position/rotation/scale asserted exactly, plus a save→reload→save byte-identity
+  check, with red proven by mutation. A `/code-review` then found what **no row could see**:
+  `buildEntryScene` **ignored its own `preloadedScene` parameter** and re-read the file post-GL —
+  the exact behaviour 0046 exists to remove — and **every matrix row still passed**, because
+  re-reading a *valid* document is indistinguishable from having preloaded it. The root cause was
+  the **fallback branch** around the parameter: it reads as defensive programming, but it is where a
+  broken preload hides, since it converts the failure mode into a success. Removed — the parameter
+  is required (no default) and the branch fails loudly with an explicit "this is a bug, not a bad
+  document" diagnostic. Two rows now assert the **mechanism** rather than the output (`the scene
+  branch does not re-read the document itself`, `preloadedScene is required, not defaulted`);
+  re-injecting the bug fails the first, restoring the default fails the second. Nine injected
+  defects in total, each failing the matrix for its own reason. Manual tier **not claimed**: the two
+  remaining boxes (`xprop` titles for a `--scene=` run, opening a saved document in a real window)
+  need a window session this environment does not have — recorded as an environment limitation, per
+  0033's discipline. Summary: `docs/summary/0046-m6-save-load-close.md`.
 
 ### M5 (spec embedded in ADR-0011; implemented, machine-verified, tickets archived)
 - 0028 (docked shell + `ViewportRect` + input-ownership gate) — complete, archived (headless

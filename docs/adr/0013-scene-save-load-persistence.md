@@ -1,6 +1,6 @@
 # ADR-0013 — M6 Save/Load: `.scene` snapshot persistence over the `Editor` facade
 
-Status: Accepted
+Status: Accepted — implemented by 0041–0046 (all archived); M6 closed 2026-10-01
 
 > Per DOCUMENTATION-LIFECYCLE: **specs (PRDs) live at the ADR layer**; `docs/ticket/` holds
 > execution tickets derived from accepted ADRs. This ADR embeds the M6 milestone spec (Problem /
@@ -561,3 +561,40 @@ persistence boundary, or editor-ownership convention **supersedes this ADR** rat
 (DOCUMENTATION-LIFECYCLE: ADRs are append-and-supersede, never overwrite). ADR-0010, ADR-0011,
 `CONTEXT.md` and `DEFINITION.md` are amended in the same change as this ADR to match Q1, Q2, Q4, Q5,
 Q9 and Q10.
+
+---
+
+## Amendment — 0046 close: the load happens PRE-GL
+
+Appended, not edited, per DOCUMENTATION-LIFECYCLE. This ADR is **Accepted as written**: the
+implementation matched Q0–Q11. This note exists because the tempting place for a silent change was
+the **load's position relative to GL**, and the change landed in a *ticket* rather than here.
+
+**What the tickets claimed, and why it was wrong.** 0045 recorded that the load *had* to happen
+after context creation "because an entry Scene needs the `AssetRegistry`, whose GPU cache requires
+a live context". Nothing in this ADR required that. `Scene` is pure data; the registry is only
+needed **later**, to resolve `assetId`s into `DrawItem`s. The constraint conflated "the entry Scene
+needs resolving" with "the entry Scene needs loading".
+
+**The corrected rule, now asserted by tests:**
+
+- **Load PRE-GL** — `main()` calls `loadSceneFrom()` before GLFW is initialised and hands the
+  result to `buildEntryScene` as a separate argument, not through `Options` (0025 froze `Options`
+  as pure syntax; a deserialized `Scene` is runtime state).
+- **Resolve POST-GL** — resolution still needs the registry, so it stays where the context exists.
+
+This is the only arrangement that satisfies this ADR's Testing Decisions ("no display required for
+any row") while keeping Q5's three-way exclusion a cheap pre-GL gate. A structural failure is a
+*user error*, not a rendering error, so it must not cost a window or a context.
+
+**Why `preloadedScene` is an `optional`, and required, with no fallback.** A valid
+`{"entities": []}` document is a real preloaded Scene, so the parameter must distinguish "absent"
+from "empty". It is **not** defaulted, and the scene branch **fails loudly** if it is not engaged,
+because an earlier revision of that function kept a re-read fallback: it ignored its own parameter,
+re-read the file post-GL, and **every matrix row still passed** — re-reading a *valid* document is
+indistinguishable from having preloaded it. The fallback was the bug's hiding place, not a safety
+net.
+
+**Also noted at close:** the 0046 ticket's "CTest count rises from 22" invariant was already stale
+when M6 started (0045 had taken it to 27); the count is now 34. Ticket-level numbers are recorded
+where they are observed, not asserted from this ADR.
