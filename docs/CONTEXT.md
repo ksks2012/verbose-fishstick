@@ -84,7 +84,10 @@ the ADR layer: the M3 spec is embedded in **ADR-0009**, the M4 spec in **ADR-001
 in **ADR-0011**; the asset CPU/GPU boundary decision is in **ADR-0012** (its execution tickets are
 0036–0039, all now complete and archived). `docs/ticket/` holds execution tickets (0026 is
 M5-adjacent, still open, waiting only on 0028; 0035 is code-quality and does not block M6; 0033 is
-in-progress on its four manual-smoke boxes; **0040 is the ADR-0012 close-out residue — two ①/③
+in-progress on its four manual-smoke boxes; **0047 is the manual verification tier those boxes and
+M6's two now share — M5/M6 are machine-verified, not fully verified, and 0047 is what closes that
+gap (needs a display; the failure mode it prevents is a reader inferring full verification from the
+green matrices)**; **0040 is the ADR-0012 close-out residue — two ①/③
 invariants the ADR states but nothing asserts; code-quality, does not block M6**; 0027 is
 **complete and archived — decided in ADR-0012**, its implementation 0036–0039 is **complete and
 archived — closed 2026-09-29**), plus the **M6 execution chain 0041–0046 (spec embedded in

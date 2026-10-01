@@ -43,6 +43,11 @@
   titles for a `--scene=` run need a window session this environment does not have; both are
   recorded as an environment limitation, per 0033's discipline. Summary:
   `docs/summary/0046-m6-save-load-close.md`.
+- **The manual gap is now tracked, not just noted**: `docs/ticket/0047` carries M5's four
+  docking/edit-smoke boxes and M6's two, so the outstanding work has an owner instead of living in
+  the prose of two archived tickets. `README.md` states the distinction plainly — M5 and M6 are
+  **machine-verified, not fully verified** — because a green matrix is easy to misread as the
+  stronger claim.
 - **0041–0045** (arch guard, `Scene::fromEntities` + `Editor::replaceScene`, the serializer
   round-trip, strict-structure/lenient-reference load policy, CLI `--scene=`/`--save-scene=` with
   app-layer atomic I/O) are complete and archived; the target graph gained one edge

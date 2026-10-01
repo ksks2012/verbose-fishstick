@@ -1,20 +1,22 @@
 # noto3d — Noto 3D Emoji Editor (MVP)
 
-C++/OpenGL editor MVP for Noto 3D-style emoji composition. With M0–M5 complete this is a
-docked editor built on a real Scene engine: an asset pipeline plus a minimal windowed renderer
-(manifest assets the user picks, plus a textured demo fixture), a pure-data Scene model with
-multi-entity composition + transforms + camera (M4), and a full ImGui editing surface — select,
-transform, swap asset, create, delete — with end-to-end structured observability (M5).
+C++/OpenGL editor MVP for Noto 3D-style emoji composition. With M0–M6 complete this is a
+docked editor built on a real Scene engine, with scenes you can save and reopen: an asset pipeline
+plus a minimal windowed renderer (manifest assets the user picks, plus a textured demo fixture), a
+pure-data Scene model with multi-entity composition + transforms + camera (M4), a full ImGui editing
+surface — select, transform, swap asset, create, delete — with end-to-end structured observability
+(M5), and versioned `.scene` JSON snapshots with atomic writes and a CLI round-trip (M6).
 
 - **Language / API:** C++20, OpenGL **3.3 Core** / GLSL 330, GLFW 3.4 (X11), GLM,
   **ImGui (docking)**, nlohmann/json, tinyobjloader (OBJ/MTL), spdlog (Log backend),
   glad + stb_image (committed under `lib/`)
 - **Docs hierarchy:** `docs/CONTEXT.md` = current implementation truth; `docs/adr/` = decision
   history (+ embedded milestone specs); `docs/DEFINITION.md` = project vocabulary;
-  `docs/CHANGELOG.md` = milestone history;   `docs/archive/ticket/` = all execution tickets
-  (complete, incl. M5 0028–0034 and the 0027 asset-boundary spike); `docs/ticket/` = pending
-  (0026 M5-adjacent camera interaction; 0035 header conformance; 0036–0039 the ADR-0012
-  `noto3d_asset_cpu` split).
+  `docs/CHANGELOG.md` = milestone history;   `docs/archive/ticket/` = all completed execution
+  tickets (incl. the M6 chain 0041–0046 and the 0027 asset-boundary spike 0036–0039);
+  `docs/ticket/` = pending (0026 M5-adjacent camera interaction; 0035 header conformance;
+  0040 asset-CPU invariant assertions; **0047 the manual verification tier that M5 and M6 could not
+  complete here**).
 
 ## Status
 
@@ -26,7 +28,8 @@ transform, swap asset, create, delete — with end-to-end structured observabili
 | **M2** | Asset pipeline (0008–0014) | ✅ complete — `AssetRegistry` + OBJ/MTL→Mesh, sRGB diffuse texture pipeline + E2E demo render, demo fixture, texture path safety |
 | **M3** | Noto vertical slice (0015–0018) | ✅ complete — fixture frozen (manifest-integrity contract test, ctest 5/5), selection diagnostics (`M3_INFO` identity line, dynamic title, `--list-assets`), human category verification |
 | **M4** | Scene composition & transform (0020–0024) | ✅ complete — pure-data Scene + draw-list seam + multi-entity runtime + orbit/zoom/pan camera; automated matrix + xprop titles + smoke; 0025 code-cleanup pass complete (ctest 15/15) |
-| **M5** | ImGui Editor (0028–0034) | ✅ complete — docked shell + `ViewportRect` + input-ownership gate, Hierarchy/selection/`Editor` facade, inspector numeric transform editing (degrees → scene radians YXZ), asset picker (value snapshot), create/destroy; closed on the automated close matrix (ctest 21/21, `scripts/m5-close-matrix.sh`) + xprop titles. Manual docking/edit smoke open as a follow-up (real window session required) |
+| **M5** | ImGui Editor (0028–0034) | ✅ complete — docked shell + `ViewportRect` + input-ownership gate, Hierarchy/selection/`Editor` facade, inspector numeric transform editing (degrees → scene radians YXZ), asset picker (value snapshot), create/destroy; closed on the automated close matrix (ctest 21/21 **at M5 close**; the suite is now 34/34, `scripts/m5-close-matrix.sh`) + xprop titles. Manual docking/edit smoke open as a follow-up (real window session required) — tracked in **0047** |
+| **M6** | Save/Load (0041–0046) | ✅ complete, machine-verified — versioned `.scene` JSON snapshots of a Scene, `Scene::fromEntities` restore with a derived id allocator, strict-structure/lenient-reference load, `--scene=` as the third pre-GL entry mode, `--save-scene=` with atomic writes. Closed on `scripts/m6-close-matrix.sh` (71 checks dev + release) + ctest 34/34, 0 warnings. The one production change this milestone needed (loading **pre-GL**, so a bad document costs no window) is a separate commit, `242ce64`. Manual tier **not claimed** — no window session here; tracked in **0047** |
 
 ### Completed tickets (`docs/archive/ticket/`)
 
@@ -41,18 +44,33 @@ transform, swap asset, create, delete — with end-to-end structured observabili
   predicate), 0012 app/renderer separation + registry integration, 0010 dependency pinning
 - **0011** M1 code-quality deferred findings (⑦⑧⑨⑩) — folded into 0012
 
-M4 tickets (0020–0025) and M5 tickets (0028–0034) are complete and archived. **M5's architecture
-was locked in ADR-0011** (docked editor layout, `ViewportRect`, `Editor`-owns-`Scene` facade,
-input-ownership gate incl. the wheel) and its execution tickets shipped as **0028–0034**; the M5
-close is delivered by **`scripts/m5-close-matrix.sh`** (CLI exit-code + structured-log matrix for
-every entry mode, M5-op log assertions via the headless app suites, static seam checks) with
-**ctest 21/21 dev + release** and `xprop` titles re-verified unchanged from M4. The four manual
-docking/edit-smoke boxes of the close remain an open follow-up (require a real window session).
-**0026** (M5 camera interaction semantics & cursor baseline, M5-adjacent, waiting on 0028) and
-**0035** (header-conformance, code-quality) are the pending side-tickets; the **0027** asset CPU/GPU
-boundary spike is **complete (ADR-0012)** with its implementation chain **0036–0039** pending. All
-completed execution history lives under `docs/archive/ticket/`. Current milestone: **M5 ImGui Editor complete — M6 Save/Load is
-next**.
+M4 tickets (0020–0025), M5 tickets (0028–0034) and the M6 chain (0041–0046) are complete and
+archived. **M5's architecture was locked in ADR-0011** (docked editor layout, `ViewportRect`,
+`Editor`-owns-`Scene` facade, input-ownership gate incl. the wheel) and its execution tickets shipped
+as **0028–0034**; the M5 close is delivered by **`scripts/m5-close-matrix.sh`** (CLI exit-code +
+structured-log matrix for every entry mode, M5-op log assertions via the headless app suites,
+static seam checks) with **ctest 21/21 dev + release at the time** (the suite is now 34/34) and `xprop` titles re-verified unchanged from
+M4.
+
+**M6's architecture was locked in ADR-0013** and shipped as **0041–0046**: a GL-free
+`noto3d_serialization` target behind a configure-time arch guard, `Scene::fromEntities` as the
+restore entry, a strict-structure / lenient-reference load policy, and the CLI surface
+(`--scene=`, `--save-scene=`) with app-layer atomic file I/O. Its close is delivered by
+**`scripts/m6-close-matrix.sh`** (71 checks, dev + release) with **ctest 34/34 dev + release** and
+**`scripts/m5-close-matrix.sh` deliberately unmodified** — 0046 locked "a new script, not a grown
+one", which is what makes "the pre-existing rows are unchanged" cheap to verify by running both.
+
+**Manual verification is outstanding for both milestones and is tracked in `docs/ticket/0047`.** The
+automated tier cannot establish the `xprop` `WM_NAME` strings, the docking/viewport interaction
+ownership, or what a reopened document actually looks like — those need a display. M5 and M6 are
+therefore **machine-verified, not fully verified**; the distinction is deliberate, and a reader
+should not infer the stronger claim from the green matrices. **0026** (M5 camera interaction
+semantics & cursor baseline, M5-adjacent, waiting on 0028) and **0035** (header conformance,
+code-quality) are the other pending side-tickets; the **0027** asset CPU/GPU boundary spike is
+**complete (ADR-0012)** with its implementation chain **0036–0039 complete and archived**, leaving
+**0040** (two ADR-0012 invariants nothing enforces) as its close-out residue. All completed
+execution history lives under `docs/archive/ticket/`. Current milestone: **M6 Save/Load complete
+and machine-verified**; no M7 is scoped.
 
 ## Build & test
 
@@ -61,20 +79,47 @@ Machine prereq (one-time): `sudo apt install libxinerama-dev libxcursor-dev libx
 ```bash
 cmake --preset dev                      # configure (Debug + sanitizer option)
 cmake --build build/dev -j               # build
-ctest --test-dir build/dev               # headless tests (21 suites)
+ctest --test-dir build/dev               # headless tests (34 suites)
 build/dev/noto3d-editor --frames=5       # non-interactive smoke: prints M0_OK / M1_DONE
 build/dev/noto3d-editor                  # interactive window
+
+# M6: entry modes and snapshot I/O (--scene= and --asset=/--demo are exclusive).
+# --frames=N bounds the run; without it the window opens and waits for input.
+build/dev/noto3d-editor --list-assets                        # pre-GL, no display needed
+build/dev/noto3d-editor "--scene=my.scene" --frames=8        # open a snapshot
+build/dev/noto3d-editor --demo --frames=8 "--save-scene=out.scene"   # render, then save atomically
 ```
+
+A structural problem in a `--scene=` document is a **user error, not a rendering error**: it exits
+non-zero with a diagnostic naming the defect, **before any window or GL context is created**, so
+those cases need no display. An unresolvable `assetId` is the deliberate exception — the entity is
+kept as data, warned about, and skipped at render (the M4 contract).
+
+Saves are atomic: the temp file is created in the *destination* directory (so `rename()` is atomic),
+overwrite is silent, and a missing parent directory is an error rather than a silent `mkdir`.
 
 Structured-log prefixes: `M0_OK` (context/capability), `M1_OK` / `M1_DONE` (renderer, frame
 completion), `M2_*` (mesh/texture), `M3_INFO` (asset identity), `M4_INFO` (scene about to render
-— logs `entities=<N>`), and the M5 editing ops asserted by the headless app suites: `M5_SEL`
+— logs `entities=<N>`), the M5 editing ops asserted by the headless app suites: `M5_SEL`
 (entity selection, `entity='<name>' id=<n>`), `M5_ASSET` (asset picker offered/hidden counts +
 assignment), `M5_XFRM` (transform commits, rotation in degrees+radians), `M5_ENTITY`
-(create/destroy, `count=<N>`).
+(create/destroy, `count=<N>`), and the M6 event lines: `M6_INFO` (`scene-loaded` /
+`scene-saved`), `M6_WARN` (unresolved `assetId`, warned not refused) and `M6_FAIL` (a structural
+defect, naming the defect). A `--scene=` run **reuses the frozen `M4_INFO` line** rather than
+introducing a new shape — its scene name is the **file stem**, and the milestone tag stays `(M4)`.
 
-To re-run the M5 close matrix on any build dir (dev axis asserts log content; add `--release` for
-exact GL exit codes): `scripts/m5-close-matrix.sh build/release --release`.
+To re-run either close matrix on a build dir (the dev axis asserts log content; add `--release` for
+exact GL exit codes, since the dev preset's LeakSanitizer reports a known Mesa llvmpipe leak):
+
+```bash
+scripts/m5-close-matrix.sh build/release --release   # M4/M5 entry modes + headless suites
+scripts/m6-close-matrix.sh build/release --release   # + M6: pre-GL failures, save, round-trip
+```
+
+Both are green in dev and release. `m6` is a **separate** script from `m5` by decision (0046): the
+M5 script had already absorbed rows from two milestones, and leaving it byte-identical is what makes
+"the pre-existing rows are unchanged" verifiable. The remaining manual boxes are in
+`docs/ticket/0047`.
 
 Presets: `dev` (Debug + sanitizer/debug-GL options), `dev-clean`, `release`. Our own code builds
 with `-Wall -Wextra -Wpedantic`; `-Werror` is opt-in (ADR-0008).
@@ -84,11 +129,13 @@ with `-Wall -Wextra -Wpedantic`; `-Werror` is opt-in (ADR-0008).
 ```text
 assets/                 manifest.json (v1, authoritative) + references/ (official PNGs),
                         geometry/ (placeholder OBJs incl. demo_checker fixture)
-src/                    app/ editor facade + entity/transform/picker edit logic + close matrix ·
+src/                    app/ editor facade + entity/transform/picker edit logic + CLI entry
+                        modes + scene-file I/O (app layer, the only filesystem-touching code) ·
                         ui/ ImGui presentation & input adaptation (docked editor shell) ·
                         scene/ pure-data Scene (EntityId/Transform/Entity) · core/ Log + GL
                         capability · renderer/ Mesh/Model/Material/ShaderProgram/Texture/Renderer ·
-                        asset/ AssetRegistry+OBJ/MTL loader · serialization/ (M6)
+                        asset/ AssetRegistry+OBJ/MTL loader · serialization/ M6 .scene JSON
+                        (GL-free behind a configure-time arch guard)
 shaders/                GLSL 330 base.vert / base.frag
 lib/                    pinned deps (glad + stb_image committed; six Git deps fetched:
                         GLFW/GLM/ImGui/json/tinyobjloader/spdlog, each on an immutable SHA)
@@ -118,16 +165,20 @@ texture ref promotes the asset to `LOADED_WITH_WARNINGS` (geometry still renders
 
 ## Next steps
 
-1. **Manual M5 smoke (open follow-up)** — the four platform-specific boxes of ticket 0033
-   (docking move/resize with correct non-square viewport aspect, the full user edit pass,
-   interaction-ownership checks, no-gizmo/no-undo confirmation). Everything else about M5 is
-   machine-closed; these need a real windowed session.
-2. **Pending ticket work**: **0036–0039** (the ADR-0012 `noto3d_asset_cpu` split — extract a
-   GL-free `renderer/vertex.hpp`, create the `noto3d_asset_cpu` target, point `tests/asset` +
-   `--list-assets` at it so they link no GL, then close out; code-quality, **does not block M6**),
-   **0035** (declaration-only header conformance: 10 remaining inline
-   definitions in `renderer`/`ui` headers — code-quality, off-chain), **0026** (M5 camera
-   interaction semantics & cursor baseline; M5-adjacent, now waiting only on 0028).
-3. **M6 Save/Load** — Scene JSON as a complete snapshot (forward contract in ADR-0010 Q4), with the
-   previous milestone's decisions carried forward. The 0027 asset-boundary gate is **closed**
-   (ADR-0012), so the ownership model this milestone depends on is determined.
+1. **Manual verification tier (0047) — the one thing genuinely outstanding.** M5's four
+   docking/edit-smoke boxes and M6's two (open a saved document and confirm the entities and
+   transforms; `xprop` `WM_NAME` for a `--scene=` run) need a real windowed session. Everything
+   machine-checkable about both milestones is done and green; these are not, and no amount of
+   headless evidence substitutes. Do not read the green matrices as "fully verified".
+2. **Pending ticket work**: **0040** (two ADR-0012 ①/③ invariants the ADR states but nothing
+   mechanically checks — code-quality, off-chain), **0035** (declaration-only header conformance: 10
+   remaining inline definitions in `renderer`/`ui` headers — code-quality, off-chain), **0026** (M5
+   camera interaction semantics & cursor baseline; M5-adjacent, still waiting only on 0028).
+3. **No M7 is scoped.** The natural next milestone would be a document workflow in the editor
+   itself (open/save from the UI, dirty state) — deliberately deferred out of M6 in ADR-0013
+   because `lib/` has no file-dialog library and ADR-0003 constrains new dependencies. That would
+   need its own grilling session and ADR before any ticket.
+
+The two close matrices are the fastest way to re-establish that nothing regressed:
+`scripts/m5-close-matrix.sh` and `scripts/m6-close-matrix.sh`, each against `build/release
+--release`.
