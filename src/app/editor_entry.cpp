@@ -76,7 +76,8 @@ int runListAssetsCommand() {
     return EXIT_SUCCESS;
 }
 
-std::optional<EntryScene> buildEntryScene(const Options& opts, asset::AssetRegistry& registry) {
+std::optional<EntryScene> buildEntryScene(const Options& opts, asset::AssetRegistry& registry,
+                                        std::optional<scene::Scene> preloadedScene) {
     EntryScene entry;
 
     if (opts.demo) {
@@ -109,25 +110,31 @@ std::optional<EntryScene> buildEntryScene(const Options& opts, asset::AssetRegis
 
     } else if (opts.scenePath) {
         // ADR-0013 Q5/Q9: --scene= is the third entry mode.  Load is STRICT on
-        // structure (0044's diagnostics, re-emitted by loadSceneFrom) and LENIENT
-        // on references: an unknown assetId is kept as pure data and skipped by
-        // collectDrawItems at draw time, which is why the resolver below is the
-        // ordinary registry-backed one rather than a scene-specific map.
-        // NOT const: the scene is MOVED into the editor below, and a const
-        // result would silently turn that move into a full Scene copy.
-        serialization::LoadResult loaded = loadSceneFrom(*opts.scenePath);
-        if (!loaded.scene) {
-            // loadSceneFrom already re-emitted 0044's diagnostic taxonomy
-            // verbatim; a second line here would only repeat the path and bury
-            // the actual defect.
+        // structure (0044's diagnostics) and LENIENT on references: an unknown
+        // assetId is kept as pure data and skipped by collectDrawItems at draw
+        // time, which is why the resolver below is the ordinary registry-backed
+        // one rather than a scene-specific map.
+        //
+        // The Scene was deserialized PRE-GL by main() and handed in, because 0046
+        // requires every structural failure to be a pre-GL exit needing no
+        // display.  There is deliberately NO re-read fallback here: a fallback
+        // would silently restore the post-GL behaviour this ticket removed, and
+        // it did -- an early version of this function kept one, ignored its own
+        // parameter, and every matrix row still passed, because re-reading a
+        // VALID document is indistinguishable from having preloaded it.  The
+        // check below is loud instead: a caller that reaches the scene branch
+        // without a preloaded document is a bug, and it fails the entry rather
+        // than quietly installing a default-constructed empty Scene.
+        if (!preloadedScene) {
+            NOTO3D_ERROR("M6_FAIL scene '{}': internal error -- the --scene= document was "
+                         "not preloaded before GL; this is a bug, not a bad document",
+                         *opts.scenePath);
             return std::nullopt;
         }
         // Q6: the ONLY way into the editor is replaceScene() BY VALUE, so the
         // entity set and the derived allocator cross together and the app never
         // obtains a mutable Scene&/Entity*.
-        entry.editor.replaceScene(std::move(*loaded.scene));
-        NOTO3D_INFO("M6_INFO scene-loaded path='{}' entities={}", *opts.scenePath,
-                    static_cast<int>(entry.editor.entityCount()));
+        entry.editor.replaceScene(std::move(*preloadedScene));
         // Q9: the FILE STEM is the scene identity, so the frozen M4_INFO line and
         // the window title below are reused unchanged rather than paralleled.
         entry.sceneName  = sceneNameFromPath(*opts.scenePath);

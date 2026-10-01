@@ -796,10 +796,10 @@ set_tests_properties(cli-asset-demo-exclusive PROPERTIES WILL_FAIL TRUE)
 # These rows point at a VALID v1 document on purpose.  An earlier version of this
 # check used a non-existent path, which made every row pass for the wrong reason:
 # with the exclusion gate deleted the run still exited 1, because the LOAD then
-# failed instead.  The gate is pre-GL while the load is post-GL (an entry Scene
-# needs the AssetRegistry, whose GPU cache requires a live context -- ADR-0010 Q5
-# and 0025's lifetime rule), so a valid document is exactly what lets these rows
-# distinguish "the gate fired" from "something else failed".
+# failed instead.  So a valid document is what lets these rows distinguish "the
+# gate fired" from "something else failed" -- and since 0046 moved the load to
+# PRE-GL, a valid path is now the only thing standing between these rows and
+# passing for the wrong reason again.
 set(NOTO3D_CLI_FIXTURES "${CMAKE_BINARY_DIR}/cli-fixtures")
 file(WRITE "${NOTO3D_CLI_FIXTURES}/valid.scene"
 "{\"version\":1,\"entities\":[{\"id\":1,\"name\":\"e1\",\"assetId\":\"smile\",\"transform\":{\"position\":[0,0,0],\"rotation\":[0,0,0],\"scale\":[1,1,1]}}]}\n")
@@ -818,3 +818,74 @@ add_test(NAME cli-scene-asset-demo-exclusive
     COMMAND $<TARGET_FILE:noto3d-editor> --asset=smile --demo
             "--scene=${NOTO3D_CLI_FIXTURES}/valid.scene")
 set_tests_properties(cli-scene-asset-demo-exclusive PROPERTIES WILL_FAIL TRUE)
+
+# ---------------------------------------------------------------------------
+# Ticket 0046 (ADR-0013 Q3/Q5/Q8): every --scene= STRUCTURAL failure is a
+# pre-GL exit, so each case is a headless-safe CTest row needing no display.
+#
+# One row per defect on purpose.  A single "any bad document fails" row would be
+# satisfied by a serializer that rejected everything, so the cases are separate
+# and the fixtures are individually malformed in ONE way each.
+#
+# Each row asserts a CASE-SPECIFIC phrase of the diagnostic rather than a bare
+# "M6_FAIL", so a row cannot pass on an unrelated failure: an exclusion gate, a
+# bad flag or a GL error all print M6_FAIL too, but none of them can print
+# "unsupported scene version" or "must be an object".
+#
+# CTest cannot assert the exit code AND the message on one row: WILL_FAIL is
+# ignored (and here inverted) when a *_REGULAR_EXPRESSION property is set, so
+# combining them made every row fail against a correct binary.  These rows
+# therefore pin the DIAGNOSTIC and scripts/m6-close-matrix.sh pins the exit
+# codes; the two together are the ticket's per-failure-case evidence.
+# ---------------------------------------------------------------------------
+file(WRITE "${NOTO3D_CLI_FIXTURES}/malformed.scene" "this is not json\n")
+file(WRITE "${NOTO3D_CLI_FIXTURES}/v2.scene" "{\"version\":2,\"entities\":[]}\n")
+file(WRITE "${NOTO3D_CLI_FIXTURES}/no-assetid.scene"
+"{\"version\":1,\"entities\":[{\"id\":1,\"name\":\"e1\",\"transform\":{\"position\":[0,0,0],\"rotation\":[0,0,0],\"scale\":[1,1,1]}}]}\n")
+file(WRITE "${NOTO3D_CLI_FIXTURES}/mistyped-transform.scene"
+"{\"version\":1,\"entities\":[{\"id\":1,\"name\":\"e1\",\"assetId\":\"smile\",\"transform\":[0,0,0]}]}\n")
+file(WRITE "${NOTO3D_CLI_FIXTURES}/short-transform.scene"
+"{\"version\":1,\"entities\":[{\"id\":1,\"name\":\"e1\",\"assetId\":\"smile\",\"transform\":{\"position\":[0,0]}}]}\n")
+
+# Missing file (Q3: a failure, never an empty document).  No regexp, so the exit
+# code IS asserted here (WILL_FAIL).
+add_test(NAME cli-scene-missing-file
+    COMMAND $<TARGET_FILE:noto3d-editor> "--scene=${NOTO3D_CLI_FIXTURES}/no-such-file.scene")
+set_tests_properties(cli-scene-missing-file PROPERTIES WILL_FAIL TRUE)
+
+# Malformed JSON -> M6_FAIL naming the parse error.
+add_test(NAME cli-scene-malformed-json
+    COMMAND $<TARGET_FILE:noto3d-editor> "--scene=${NOTO3D_CLI_FIXTURES}/malformed.scene")
+set_tests_properties(cli-scene-malformed-json PROPERTIES
+    PASS_REGULAR_EXPRESSION "M6_FAIL.*malformed JSON")
+
+# version != 1 -> refused, and the diagnostic says which version it wanted.
+add_test(NAME cli-scene-version-unsupported
+    COMMAND $<TARGET_FILE:noto3d-editor> "--scene=${NOTO3D_CLI_FIXTURES}/v2.scene")
+set_tests_properties(cli-scene-version-unsupported PROPERTIES
+    PASS_REGULAR_EXPRESSION "M6_FAIL.*unsupported scene version")
+
+# A missing required field -> the diagnostic NAMES the field, so the user knows
+# what to fix rather than only that something is wrong.
+add_test(NAME cli-scene-missing-assetid-field
+    COMMAND $<TARGET_FILE:noto3d-editor> "--scene=${NOTO3D_CLI_FIXTURES}/no-assetid.scene")
+set_tests_properties(cli-scene-missing-assetid-field PROPERTIES
+    PASS_REGULAR_EXPRESSION "M6_FAIL.*missing 'assetId'")
+
+# transform present but an array, not an object.
+add_test(NAME cli-scene-mistyped-transform
+    COMMAND $<TARGET_FILE:noto3d-editor> "--scene=${NOTO3D_CLI_FIXTURES}/mistyped-transform.scene")
+set_tests_properties(cli-scene-mistyped-transform PROPERTIES
+    PASS_REGULAR_EXPRESSION "M6_FAIL.*'transform' must be an object")
+
+# transform.position with 2 components instead of 3.
+add_test(NAME cli-scene-short-transform
+    COMMAND $<TARGET_FILE:noto3d-editor> "--scene=${NOTO3D_CLI_FIXTURES}/short-transform.scene")
+set_tests_properties(cli-scene-short-transform PROPERTIES
+    PASS_REGULAR_EXPRESSION "M6_FAIL.*exactly 3 components")
+
+# --save-scene= is an OUTPUT option: an empty path is a parse-time (pre-GL)
+# diagnostic, never a write to "".
+add_test(NAME cli-save-scene-empty
+    COMMAND $<TARGET_FILE:noto3d-editor> "--save-scene=")
+set_tests_properties(cli-save-scene-empty PROPERTIES WILL_FAIL TRUE)

@@ -16,6 +16,7 @@
 #include <renderer.hpp>
 #include <scene.hpp>
 #include <scene_file_io.hpp>
+#include <scene_io.hpp>
 #include <shader_program.hpp>
 #include <viewport_state.hpp>
 
@@ -31,7 +32,6 @@
 
 #include <cstdlib>
 #include <optional>
-#include <string>
 
 // Shader + asset locations are owned by the build system, never discovered at
 // runtime (ticket 0011-⑦): CMake defines both absolute paths from the source dir.
@@ -76,7 +76,8 @@ bool loadBaseShader(noto3d::renderer::ShaderProgram& out) {
 // delete GL objects without a context).  Making the function itself the scope
 // is what guarantees that ordering: run() keeps only the GLFW lifecycle
 // (ticket 0025).
-int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
+int renderScene(GLFWwindow* window, const noto3d::app::Options& opts,
+                noto3d::scene::Scene preloadedScene) {
     int exitCode = EXIT_SUCCESS;
     int frames   = 0;
     bool ranLoop = false;
@@ -106,7 +107,7 @@ int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
                 loadR.loaded, loadR.warned, loadR.failed);
 
     // ---- M4 — Scene construction (ADR-0010 Q5/Q6, editor_entry.cpp) --------
-    auto entry = noto3d::app::buildEntryScene(opts, registry);
+    auto entry = noto3d::app::buildEntryScene(opts, registry, std::move(preloadedScene));
     if (!entry) {
         return EXIT_FAILURE;  // diagnostic already logged
     }
@@ -117,6 +118,13 @@ int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
     // not an entry mode, so it combines with --asset/--demo/--scene and with the
     // default (which is what makes "--demo --save-scene=out.scene" work).
     // Q6: no new Editor API — Editor::scene() already returns const Scene&.
+    //
+    // This stays AFTER the GL context for the asset-backed modes because the Scene
+    // it serializes comes from the registry, and the registry's GPU cache is why
+    // the context exists (ADR-0010 Q5 / 0025's lifetime rule).  A --scene= run has
+    // no such dependency, but writing it early would emit M6_INFO scene-saved
+    // before M4_INFO rendering scene, inverting the order the close matrix reads
+    // them; one code path that is correct beats two that are correct differently.
     if (opts.saveScenePath) {
         // writeSceneFileAtomic() already logged the exact path and reason, so
         // there is nothing to add here: re-logging produced two M6_FAIL lines for
@@ -199,7 +207,7 @@ int renderScene(GLFWwindow* window, const noto3d::app::Options& opts) {
 
 }  // namespace
 
-static int run(const noto3d::app::Options& opts) {
+static int run(const noto3d::app::Options& opts, noto3d::scene::Scene preloadedScene) {
     if (!glfwInit()) {
         NOTO3D_CRITICAL("M0_FAIL: glfwInit failed");
         return EXIT_FAILURE;
@@ -280,7 +288,7 @@ static int run(const noto3d::app::Options& opts) {
 
     // The whole render path (GL objects, Scene, main loop) lives in renderScene()
     // so every GL object dies before the context does.
-    const int exitCode = renderScene(window, opts);
+    const int exitCode = renderScene(window, opts, preloadedScene);
 
     glfwDestroyWindow(window);
     glfwTerminate();
@@ -325,5 +333,29 @@ int main(int argc, char** argv) {
         NOTO3D_CRITICAL("M6_FAIL: {} are mutually exclusive entry modes", given);
         return EXIT_FAILURE;
     }
-    return run(opts);
+
+    // ---- M6 — --scene= deserialized PRE-GL (0046) ---------------------------
+    // A malformed .scene is a user error, not a rendering error, so it must not
+    // cost a window or a context.  Ticket 0046 requires every structural-failure
+    // row of the close matrix to exit non-zero with NO display, which is only
+    // true if the parse happens here rather than inside renderScene() — and the
+    // parse genuinely needs nothing GL: readSceneFile + deserializeScene touch the
+    // filesystem and nlohmann only, which is the 0041 arch guard's whole point.
+    //
+    // This does NOT mean a valid document skips the registry: buildEntryScene
+    // still installs the Scene and the resolver, so an unresolvable assetId is
+    // still warned and skipped at render.  Only the FAILURE moved earlier.
+    noto3d::scene::Scene preloadedScene;
+    if (opts.scenePath) {
+        noto3d::serialization::LoadResult loaded =
+            noto3d::app::loadSceneFrom(*opts.scenePath);
+        if (!loaded.scene) {
+            // loadSceneFrom already re-emitted 0044's diagnostic taxonomy.
+            return EXIT_FAILURE;
+        }
+        NOTO3D_INFO("M6_INFO scene-loaded path='{}' entities={}", *opts.scenePath,
+                    static_cast<int>(loaded.scene->entities().size()));
+        preloadedScene = std::move(*loaded.scene);
+    }
+    return run(opts, std::move(preloadedScene));
 }

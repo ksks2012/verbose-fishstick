@@ -44,7 +44,17 @@ struct EntryScene {
 //
 // Every render path still goes through collectDrawItems() — there is no direct
 // submit bypass (ticket 0022).
+// `preloadedScene` is the --scene= document already deserialized PRE-GL by
+// main() (ticket 0046).  It is passed separately from Options because Options is
+// the pure-syntax contract of ticket 0025.
+//
+// It is an optional because an empty Scene is NOT the absent case: a valid
+// document with "entities":[] is a real preloaded Scene.  The parameter is
+// REQUIRED in the --scene= branch and is intentionally NOT defaulted — that
+// prevents the fallback path that silently made the "preloaded" parameter dead
+// during the 0046 diff review (see standards review findings).
 [[nodiscard]] std::optional<EntryScene> buildEntryScene(
-    const Options& opts, asset::AssetRegistry& registry);
+    const Options& opts, asset::AssetRegistry& registry,
+    std::optional<scene::Scene> preloadedScene);
 
 }  // namespace noto3d::app
